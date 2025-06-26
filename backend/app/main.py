@@ -12,9 +12,7 @@ Déployé sur Render via the Dockerfile you created earlier.
 """
 from dotenv import load_dotenv
 load_dotenv()
-
-import os
-import json
+import base64, json, os
 import datetime as dt
 from typing import List, Optional
 from datetime import timezone          
@@ -57,7 +55,8 @@ NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
 # Google-Service-Account credentials JSON (Render env-var, **not** a file path)
-GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+cred_b64 = os.getenv("GOOGLE_CREDENTIALS_B64", "")
+cred_json = base64.b64decode(cred_b64).decode()
 if not GOOGLE_CREDENTIALS_JSON:
     raise RuntimeError("Missing GOOGLE_SERVICE_ACCOUNT_JSON env-var")
 
@@ -68,10 +67,10 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 SCOPES         = ["https://www.googleapis.com/auth/spreadsheets"]
-creds_dict     = json.loads(GOOGLE_CREDENTIALS_JSON)
+creds_dict     = json.loads(cred_json)
 credentials    = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 gc             = gspread.authorize(credentials)
-spreadsheet_id = creds_dict.get("spreadsheet_id")  # store your main sheet id here
+spreadsheet_id = os.getenv("SPREADSHEET_ID")
 if not spreadsheet_id:
     raise RuntimeError("Add 'spreadsheet_id' key to your service-account JSON")
 
