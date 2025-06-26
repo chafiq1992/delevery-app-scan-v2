@@ -123,11 +123,28 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # 👇 ADD THIS EXACTLY BELOW
 DRIVERS = {
-    "driver1": "SHEET_ID_1",
-    "driver2": "SHEET_ID_2",
-    "driver3": "SHEET_ID_3",
-    "driver4": "SHEET_ID_4"
+    "driver1": {
+        "sheet_id": "GOOGLE_SHEET_ID_1",
+        "orders_tab": "Orders1",
+        "payouts_tab": "Payouts1"
+    },
+    "driver2": {
+        "sheet_id": "GOOGLE_SHEET_ID_2",
+        "orders_tab": "Orders2",
+        "payouts_tab": "Payouts2"
+    },
+    "driver3": {
+        "sheet_id": "GOOGLE_SHEET_ID_3",
+        "orders_tab": "Orders3",
+        "payouts_tab": "Payouts3"
+    },
+    "driver4": {
+        "sheet_id": "GOOGLE_SHEET_ID_4",
+        "orders_tab": "Orders4",
+        "payouts_tab": "Payouts4"
+    },
 }
+
 
 @app.get("/", response_class=HTMLResponse)
 async def show_login():
