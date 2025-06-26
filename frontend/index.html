@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Delivery Orders Management</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#f5f7fa;color:#333;line-height:1.6}
+    .header{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1rem;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
+    .nav-tabs{display:flex;background:white;border-bottom:2px solid #e1e8ed;position:sticky;top:0;z-index:100}
+    .nav-tab{flex:1;padding:1rem;text-align:center;cursor:pointer;border:none;background:white;font-size:1rem;font-weight:600;color:#666;transition:all 0.3s ease}
+    .nav-tab.active{color:#004aad;border-bottom:3px solid #004aad;background:#f8faff}
+    .tab-content{display:none;padding:1.5rem;max-width:1000px;margin:0 auto}
+    .tab-content.active{display:block}
+    #reader{width:100%;max-width:400px;margin:0 auto 1.5rem auto;border-radius:15px;box-shadow:0 4px 20px rgba(0,0,0,0.1);background:white;padding:15px;display:none}
+    #result{margin:1.5rem 0;font-size:1.2rem;color:#004aad;min-height:2em;text-align:center;font-weight:600}
+    .scan-btn{display:inline-flex;align-items:center;justify-content:center;padding:1rem 2rem;font-size:1.2rem;font-weight:bold;background:linear-gradient(135deg,#004aad,#0066cc);color:white;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 15px rgba(0,74,173,0.3);transition:all 0.3s ease;gap:0.5em;margin:0 auto;display:block;width:fit-content}
+    .scan-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,74,173,0.4)}
+    .orders-container{display:grid;gap:1rem}
+    .order-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-left:4px solid #004aad;transition:all 0.3s ease}
+    .order-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,0.15)}
+    .order-card.delivered{border-left-color:#4caf50}
+    .order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem}
+    .order-name{font-size:1.3rem;font-weight:bold;color:#004aad}
+    .scan-date{background:#e3f2fd;color:#1976d2;padding:0.3rem 0.8rem;border-radius:20px;font-size:0.9rem;font-weight:600}
+    .customer-info{margin-bottom:1rem}
+    .customer-name{font-size:1.1rem;font-weight:600;color:#333;margin-bottom:0.3rem}
+    .customer-phone{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem}
+    .phone-btn{background:#25d366;color:white;border:none;padding:0.5rem;border-radius:50%;cursor:pointer;font-size:1rem;transition:all 0.3s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:35px;height:35px}
+    .phone-btn:hover{background:#128c7e;transform:scale(1.1)}
+    .address{color:#666;font-size:0.95rem;line-height:1.4}
+    .order-details{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0;padding:1rem;background:#f8faff;border-radius:8px}
+    .detail-item{display:flex;flex-direction:column}
+    .detail-label{font-size:0.9rem;color:#666;margin-bottom:0.2rem}
+    .detail-value{font-weight:600;color:#333}
+    .cash-input{padding:0.5rem;border:2px solid #ddd;border-radius:6px;font-size:1rem;width:100%;transition:border-color 0.3s ease}
+    .cash-input:focus{outline:none;border-color:#004aad}
+    .fee-display{color:#4caf50;font-weight:bold;font-size:1.1rem}
+    .fee-exchange{color:#ff9800}
+    .status-section{display:flex;gap:1rem;align-items:center;margin-top:1rem;flex-wrap:wrap}
+    .status-select{padding:0.5rem 1rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;background:white;cursor:pointer;transition:border-color 0.3s ease;min-width:150px}
+    .status-select:focus{outline:none;border-color:#004aad}
+    .notes-section{margin-top:1rem}
+    .notes-input{width:100%;padding:0.8rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;resize:vertical;min-height:80px;transition:border-color 0.3s ease}
+    .notes-input:focus{outline:none;border-color:#004aad}
+    .loading,.no-orders{text-align:center;padding:2rem;color:#666;font-size:1.1rem}
+    .no-orders{color:#999;font-size:1.2rem;padding:3rem}
+    .error-message{text-align:center;padding:2rem;color:#d32f2f;font-size:1.1rem;background:#ffebee;border-radius:8px;margin:1rem 0}
+    .tag-badge{display:inline-block;padding:0.3rem 0.8rem;border-radius:20px;font-size:0.85rem;font-weight:600;margin-top:0.5rem}
+    .tag-k{background:#ffc0cb;color:#333}
+    .tag-big{background:#fff176;color:#333}
+    .tag-12livery,.tag-12livrey{background:#a5d6a7;color:#333}
+    .tag-fast{background:#90caf9;color:#333}
+    .tag-oscario{background:#40e0d0;color:#333}
+    .tag-sand{background:#ffcc80;color:#333}
+    .tag-ch{background:#ffab91;color:#333}
+    
+    /* Payout Management Styles */
+    .payout-container{display:grid;gap:1.5rem}
+    .payout-summary{background:linear-gradient(135deg,#4caf50,#66bb6a);color:white;padding:2rem;border-radius:12px;box-shadow:0 4px 20px rgba(76,175,80,0.3);margin-bottom:2rem}
+    .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+    .summary-item{text-align:center}
+    .summary-label{font-size:0.9rem;opacity:0.9;margin-bottom:0.5rem}
+    .summary-value{font-size:2rem;font-weight:bold}
+    .payout-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-left:4px solid #4caf50}
+    .payout-card.paid{border-left-color:#2196f3;opacity:0.8}
+    .payout-header{display:flex;justify-content:between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:1rem}
+    .payout-period{font-size:1.2rem;font-weight:bold;color:#4caf50}
+    .payout-status{padding:0.3rem 1rem;border-radius:20px;font-size:0.9rem;font-weight:600}
+    .status-pending{background:#fff3e0;color:#f57c00}
+    .status-paid{background:#e8f5e8;color:#2e7d32}
+    .payout-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin:1rem 0;padding:1rem;background:#f8faff;border-radius:8px}
+    .payout-orders{margin-top:1rem}
+    .payout-order-item{display:flex;justify-content:space-between;align-items:center;padding:0.5rem;background:#f5f5f5;border-radius:6px;margin-bottom:0.5rem}
+    .mark-paid-btn{background:#2196f3;color:white;border:none;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;font-weight:600;transition:all 0.3s ease}
+    .mark-paid-btn:hover{background:#1976d2;transform:translateY(-1px)}
+    .mark-paid-btn:disabled{background:#ccc;cursor:not-allowed;transform:none}
+    
+    @media (max-width:768px){
+      .tab-content{padding:1rem}
+      .order-header{flex-direction:column;align-items:flex-start}
+      .status-section{flex-direction:column;align-items:stretch}
+      .status-select{width:100%}
+      .order-details{grid-template-columns:1fr}
+      .summary-grid{grid-template-columns:1fr}
+      .payout-details{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📦 Delivery Orders Management</h1>
+    <p>Ready to scan and manage orders</p>
+  </div>
+  
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showTab('scanner')">📷 Scanner</button>
+    <button class="nav-tab" onclick="showTab('orders')">📋 Orders</button>
+    <button class="nav-tab" onclick="showTab('payouts')">💰 Payouts</button>
+  </div>
+  
+  <div id="scanner-tab" class="tab-content active">
+    <div id="reader"></div>
+    <div id="result">Click "Start Scan" to begin scanning orders.</div>
+    <button class="scan-btn" id="scanBtn" onclick="startScanner()">📷 Start Scan</button>
+    <button class="scan-btn" id="againBtn" onclick="startScanner()" style="display:none">🔄 Scan Another</button>
+    <!-- Manual entry when a barcode is missing -->
+    <input id="manualOrderInput"
+           placeholder="Enter order # manually"
+           style="display:block;margin:1.2rem auto 0.8rem auto;
+                  padding:0.8rem 1rem;font-size:1rem;
+                  border:2px solid #ddd;border-radius:12px;width:90%;max-width:400px;">
+    <button class="scan-btn" onclick="manualAdd()">✏️ Add Order Manually</button>
+  </div>
+  
+  <div id="orders-tab" class="tab-content">
+    <div id="ordersContainer" class="orders-container">
+      <div class="loading">Click here to load orders</div>
+      <button class="scan-btn" onclick="loadOrders()">📋 Load Orders</button>
+    </div>
+  </div>
+
+  <div id="payouts-tab" class="tab-content">
+    <div id="payoutsContainer" class="payout-container">
+      <div class="loading">Click here to load payouts</div>
+      <button class="scan-btn" onclick="loadPayouts()">💰 Load Payouts</button>
+    </div>
+  </div>
+
+  <script>
+  /* ─────────────────────────────────────────────────────────────
+     1.  Tiny helper → same host as FastAPI on Render
+     ────────────────────────────────────────────────────────────*/
+  const API      = "http://127.0.0.1:8000";
+  const headers  = { "Content-Type": "application/json" };
+
+  const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
+  const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
+  const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
+
+  /* ─────────────────────────────────────────────────────────────
+     2.  Globals copied from old code
+     ────────────────────────────────────────────────────────────*/
+  let scanner, orders = [], payouts = [];
+  const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
+
+  /* ─────────────────────────────────────────────────────────────
+     3.  Navigation tabs (unchanged UI, but auto-refreshes)
+     ────────────────────────────────────────────────────────────*/
+  function showTab(t){
+    document.querySelectorAll('.nav-tab').forEach(e=>e.classList.remove('active'));
+    document.querySelector(`[onclick="showTab('${t}')"]`).classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+    document.getElementById(`${t}-tab`).classList.add('active');
+    if(t==='orders')  loadOrders();
+    if(t==='payouts') loadPayouts();
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     4.  Scanner & manual-add
+     ────────────────────────────────────────────────────────────*/
+  function startScanner(){
+    document.getElementById('result').innerHTML="Point your camera at the order barcode...";
+    document.getElementById('reader').style.display="block";
+    document.getElementById('scanBtn').style.display="none";
+    document.getElementById('againBtn').style.display="none";
+
+    scanner = new Html5Qrcode("reader");
+    scanner.start(
+      {facingMode:"environment"},
+      {fps:10,qrbox:250},
+      code => {                       // ★ on successful scan
+        navigator.vibrate?.(200);
+        scanner.stop().then(()=>{
+          document.getElementById('reader').style.display="none";
+          document.getElementById('againBtn').style.display="block";
+          document.getElementById('result').innerHTML='⏳ Processing scan…';
+          apiPost("/scan", { barcode: code })
+            .then(handleScanResult)
+            .catch(err => handleScanError(err));
+        });
+      },
+      () => {}                        // ignore scan errors
+    ).catch(e=>{
+      document.getElementById('result').innerHTML="❌ Camera error: "+e;
+      document.getElementById('reader').style.display="none";
+      document.getElementById('scanBtn').style.display="block";
+    });
+  }
+
+  function manualAdd(){
+    const code = document.getElementById('manualOrderInput').value.trim();
+    if(!code){alert('Enter the order number first');return;}
+    document.getElementById('result').innerHTML='⏳ Adding order…';
+    apiPost("/scan", { barcode: code })
+      .then(handleScanResult)
+      .catch(handleScanError);
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     5.  Scan result handlers  (now expect JSON object, not string)
+     ────────────────────────────────────────────────────────────*/
+  function handleScanResult(r){
+    const {result,order,tag,deliveryStatus} = r || {};
+    document.getElementById('result').innerHTML = `
+      <div style="font-weight:600;margin-bottom:0.5rem;">${result||'Unknown'}</div>
+      <div>Order: ${order||'N/A'}</div>
+      ${tag?`<div>Tag: <span class="tag-badge tag-${tag}">${tag}</span></div>`:''}
+      ${deliveryStatus?`<div>Status: ${deliveryStatus}</div>`:''}`;
+  }
+  function handleScanError(e){
+    document.getElementById('result').innerHTML="❌ Scan failed: "+e;
+    document.getElementById('againBtn').style.display="block";
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     6.  Orders
+     ────────────────────────────────────────────────────────────*/
+  function loadOrders(){
+    document.getElementById('ordersContainer').innerHTML='<div class="loading">Loading orders...</div>';
+    apiGet("/orders")
+      .then(displayOrders)
+      .catch(e=>document.getElementById('ordersContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
+
+  function displayOrders(ol){
+    orders = ol || [];
+    const c = document.getElementById('ordersContainer');
+    if(!orders.length){ c.innerHTML='<div class="no-orders">📭 No active orders found.</div>'; return; }
+
+    let h = '';
+    orders.forEach(o=>{
+      const tc = getPrimaryTag(o.tags);
+      const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
+      const fee = isExchange ? 10 : 20;
+      const delivered = o.deliveryStatus === 'Livré';
+      h += `<div class="order-card ${delivered?'delivered':''}">
+        <div class="order-header">
+          <div class="order-name">${o.orderName}</div>
+          <div class="scan-date">📅 ${o.scanDate}</div>
+        </div>
+        <div class="customer-info">
+          <div class="customer-name">${o.customerName||'N/A'}</div>
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn">📞</a></div>`:''}
+          <div class="address">📍 ${o.address||'No address provided'}</div>
+          ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
+        </div>
+        <div class="order-details">
+          <div class="detail-item">
+            <div class="detail-label">Cash Amount (DH)</div>
+            <input type="number" class="cash-input" value="${o.cashAmount||''}" placeholder="Enter cash amount"
+                   onchange="updateCashAmount('${o.orderName}',this.value)">
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Driver Fee</div>
+            <div class="detail-value fee-display ${isExchange?'fee-exchange':''}">${fee} DH ${isExchange?'(Exchange)':''}</div>
+          </div>
+        </div>
+        <div class="status-section">
+          <select class="status-select" onchange="updateOrderStatus('${o.orderName}',this.value,this)">
+            ${deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="notes-section">
+          <textarea class="notes-input" placeholder="Add notes…" onchange="updateOrderNotes('${o.orderName}',this.value)">${o.notes||''}</textarea>
+        </div>
+      </div>`;
+    });
+    c.innerHTML = h;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     7.  Orders – update endpoints
+     ────────────────────────────────────────────────────────────*/
+  function updateOrderStatus(orderName,newStatus,selectEl){
+    apiPut("/order/status", {order_name:orderName,new_status:newStatus})
+      .then(()=>{
+        const card = selectEl.closest('.order-card');
+        if(newStatus==='Livré'){ card.classList.add('delivered'); loadPayouts(); }
+        if(newStatus==='Returned'){ card.remove(); loadPayouts(); }
+      })
+      .catch(e=>alert('Error updating status: '+e));
+  }
+
+  function updateOrderNotes(orderName,note){
+    apiPut("/order/status", {order_name:orderName,note})
+      .catch(e=>alert('Error updating notes: '+e));
+  }
+
+  function updateCashAmount(orderName,amount){
+    const cash = parseFloat(amount)||0;
+    apiPut("/order/status", {order_name:orderName,cash_amount:cash})
+      .catch(e=>alert('Error updating cash amount: '+e));
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     8.  Payouts
+     ────────────────────────────────────────────────────────────*/
+  function loadPayouts(){
+    document.getElementById('payoutsContainer').innerHTML='<div class="loading">Loading payouts...</div>';
+    apiGet("/payouts")
+      .then(displayPayouts)
+      .catch(e=>document.getElementById('payoutsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
+
+  function displayPayouts(pl){
+    payouts = Array.isArray(pl)?pl:pl? [pl]:[];
+    const c = document.getElementById('payoutsContainer');
+    if(!payouts.length){
+      c.innerHTML='<div class="no-orders">💰 No payouts found.</div>'; return;
+    }
+    const totalCash  = payouts.reduce((s,p)=>s+p.totalCash ,0);
+    const totalFees  = payouts.reduce((s,p)=>s+p.totalFees ,0);
+    const totalPayout= payouts.reduce((s,p)=>s+p.totalPayout,0);
+    const pendingCnt = payouts.filter(p=>p.status!=='paid'&&p.status!=='Paid').length;
+
+    let h = `
+      <div class="payout-summary">
+        <h2 style="text-align:center;margin-bottom:1rem;">💰 Payout Summary</h2>
+        <div class="summary-grid">
+          <div class="summary-item"><div class="summary-label">Total Cash</div><div class="summary-value">${totalCash} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Total Fees</div><div class="summary-value">${totalFees} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Net Payout</div><div class="summary-value">${totalPayout} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Pending</div><div class="summary-value">${pendingCnt}</div></div>
+        </div>
+      </div>`;
+
+    payouts.forEach(p=>{
+      const paid = p.status==='paid'||p.status==='Paid';
+      const ordersArr = (p.orders||"").split(',').map(s=>s.trim()).filter(Boolean);
+      h += `<div class="payout-card ${paid?'paid':''}">
+        <div class="payout-header">
+          <div class="payout-period">📅 ${p.dateCreated||'N/A'}</div>
+          <div class="payout-status ${paid?'status-paid':'status-pending'}">${paid?'✅ Paid':'⏳ Pending'}</div>
+        </div>
+        <div class="payout-details">
+          <div class="detail-item"><div class="detail-label">Cash</div><div class="detail-value">${p.totalCash} DH</div></div>
+          <div class="detail-item"><div class="detail-label">Fees</div><div class="detail-value">${p.totalFees} DH</div></div>
+          <div class="detail-item"><div class="detail-label">Net</div><div class="detail-value" style="color:#2e7d32;font-weight:bold">${p.totalPayout} DH</div></div>
+          <div class="detail-item"><div class="detail-label">Orders</div><div class="detail-value">${ordersArr.length}</div></div>
+        </div>
+        <div class="payout-orders">
+          <h4 style="margin-bottom:0.5rem;color:#666;">Orders in this payout:</h4>
+          ${ordersArr.length?ordersArr.map(o=>`<div class="payout-order-item"><span>${o}</span></div>`).join(''):
+            '<div style="color:#999;font-style:italic;">No orders</div>'}
+        </div>
+        ${!paid?`<button class="mark-paid-btn" onclick="markPayoutPaid('${p.payoutId}')">💰 Mark as Paid</button>`:''}
+      </div>`;
+    });
+    c.innerHTML = h;
+  }
+
+  function markPayoutPaid(payoutId){
+    apiPost(`/payout/mark-paid/${payoutId}`)
+      .then(()=>{ loadPayouts(); alert('✅ Payout marked as paid'); })
+      .catch(e=>alert('Error marking payout: '+e));
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     9.  Helper – tag mapping  (unchanged)
+     ────────────────────────────────────────────────────────────*/
+  function getPrimaryTag(t){
+    const l=(t||'').toLowerCase();
+    return l.includes('ch')?'ch':
+           l.includes('big')?'big':
+           l.includes('k')?'k':
+           l.includes('12livery')?'12livery':
+           l.includes('12livrey')?'12livrey':
+           l.includes('fast')?'fast':
+           l.includes('oscario')?'oscario':
+           l.includes('sand')?'sand':'';
+  }
+  </script>
+</body>
+</html>
