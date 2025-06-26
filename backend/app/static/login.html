@@ -1,4 +1,3 @@
-<!-- login.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -15,10 +14,29 @@
   </style>
 </head>
 <body>
-  <form class="login-box" method="POST" action="/login">
+  <div class="login-box">
     <h2>🔒 Driver Login</h2>
-    <input name="driver_id" type="text" placeholder="Enter your driver code" required />
-    <button type="submit">Login</button>
-  </form>
+    <input id="driverCode" type="text" placeholder="Enter your driver code" />
+    <button onclick="login()">Login</button>
+  </div>
+
+  <script>
+    const validDrivers = {
+      "driver1": true,
+      "driver2": true,
+      "driver3": true,
+      "driver4": true
+    };
+
+    function login() {
+      const code = document.getElementById('driverCode').value.trim();
+      if (validDrivers[code]) {
+        localStorage.setItem('driver_id', code);
+        location.href = "/static/index.html";
+      } else {
+        alert("Invalid code. Please try again.");
+      }
+    }
+  </script>
 </body>
 </html>
