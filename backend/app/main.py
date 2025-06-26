@@ -20,6 +20,8 @@ import requests
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import gspread
+from google.oauth2.service_account import Credentials
 
 
 
@@ -56,15 +58,11 @@ EXCHANGE_DELIVERY_FEE = 10
 
 # Google-Service-Account credentials JSON (Render env-var, **not** a file path)
 cred_b64 = os.getenv("GOOGLE_CREDENTIALS_B64", "")
-cred_json = base64.b64decode(cred_b64).decode()
-if not GOOGLE_CREDENTIALS_JSON:
-    raise RuntimeError("Missing GOOGLE_SERVICE_ACCOUNT_JSON env-var")
+# Bail out early if the secret is missing
+if not cred_b64:
+    raise RuntimeError("Missing GOOGLE_CREDENTIALS_B64 env-var")
 
-# ───────────────────────────────────────────────────────────────
-# GOOGLE SHEETS HELPERS  (gspread + service account)
-# ───────────────────────────────────────────────────────────────
-import gspread
-from google.oauth2.service_account import Credentials
+cred_json = base64.b64decode(cred_b64).decode()
 
 SCOPES         = ["https://www.googleapis.com/auth/spreadsheets"]
 creds_dict     = json.loads(cred_json)
