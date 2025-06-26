@@ -9,10 +9,10 @@ RUN apt-get update -y && \
 
 # 2) app code  ──────────────────────────────────────────────────
 WORKDIR /app
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend /app
+COPY . /app
 
 # 3) uvicorn via gunicorn  ──────────────────────────────────────
 # Render exposes $PORT automatically
