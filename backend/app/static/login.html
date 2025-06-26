@@ -32,7 +32,7 @@
       const code = document.getElementById('driverCode').value.trim();
       if (validDrivers[code]) {
         localStorage.setItem('driver_id', code);
-        location.href = "/static/index.html";
+        location.href = `/static/index.html?driver=${code}`;
       } else {
         alert("Invalid code. Please try again.");
       }
