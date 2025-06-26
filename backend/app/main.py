@@ -19,10 +19,11 @@ from datetime import timezone
 import requests
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.cors import CORSMiddleware
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -118,13 +119,32 @@ app = FastAPI(title="Delivery FastAPI backend")
 static_path = os.path.join(os.path.dirname(__file__), "static")
 
 # ✅ Mount the /static directory
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# 👇 ADD THIS EXACTLY BELOW
+DRIVERS = {
+    "driver1": "SHEET_ID_1",
+    "driver2": "SHEET_ID_2",
+    "driver3": "SHEET_ID_3",
+    "driver4": "SHEET_ID_4"
+}
 
+@app.get("/", response_class=HTMLResponse)
+async def show_login():
+    return FileResponse(os.path.join(STATIC_DIR, "login.html"))
+
+@app.post("/login", response_class=HTMLResponse)
+async def login(driver_id: str = Form(...)):
+    if driver_id in DRIVERS:
+        response = RedirectResponse(url=f"/static/index.html?driver={driver_id}", status_code=302)
+        return response
+    return HTMLResponse("<h2>Invalid driver ID</h2>", status_code=401)
+
+# Allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5500"],
-    allow_methods=["GET", "POST", "PUT"],
+    allow_origins=["*"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -421,10 +441,7 @@ def get_payouts():
         for r in reversed(data)
     ]
     
-@app.get("/", include_in_schema=False)
-def root():
-    return FileResponse(os.path.join(static_path, "index.html"))
-    
+
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str):
     ws = _get_or_create_sheet(PAYOUTS_SHEET_NAME, PAYOUT_HEADER)
