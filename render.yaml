@@ -1,33 +1,30 @@
 ###############################################################
-# Render “Blueprint” – pasting this into Render creates &
-# links both services (backend + Expo Web PWA) automatically.
+# Render Blueprint – backend + Expo static site
 ###############################################################
 services:
-  # ───────────────────────────────────────── backend
   - type: web
     name: delivery-backend
     env: docker
     rootDir: backend
     plan: free
-    region: frankfurt        # or your nearest region
+    region: frankfurt
     healthCheckPath: /health
     autoDeploy: true
-    dockerCommand: ""        # Render uses the CMD in Dockerfile
     envVars:
-      - key: SUPABASE_URL
-        sync: false          # add value in dashboard
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
 
-  # ───────────────────────────────────────── Expo web build
-  - type: static
-    name: delivery-web
-    rootDir: app             # Expo project lives here
+staticSites:
+  - name: delivery-web
+    rootDir: app                    # Expo project lives here
     buildCommand: |
       npx expo export:web --non-interactive --output-dir dist
     staticPublishPath: dist
+    plan: free
     pullRequestPreviewsEnabled: true
