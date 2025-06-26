@@ -223,7 +223,7 @@
      ────────────────────────────────────────────────────────────*/
   function loadOrders(){
     document.getElementById('ordersContainer').innerHTML='<div class="loading">Loading orders...</div>';
-    apiGet("/orders")
+    apiGet(`/orders?driver=${driver_id}`)
       .then(displayOrders)
       .catch(e=>document.getElementById('ordersContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
   }
