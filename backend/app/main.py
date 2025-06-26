@@ -377,8 +377,15 @@ def scan(payload: ScanIn):
 
 
 @app.get("/orders", tags=["orders"])
-def list_active_orders():
-    ws = _get_or_create_sheet(SHEET_NAME, ORDER_HEADER)
+def list_active_orders(driver: str):
+    driver_config = DRIVERS.get(driver)
+    if not driver_config:
+        raise HTTPException(status_code=404, detail="Invalid driver")
+
+    sheet_id = driver_config["sheet_id"]
+    order_tab = driver_config["order_tab"]
+
+    ws = _get_or_create_sheet(sheet_id, ORDER_HEADER, tab_name=order_tab)
     data = ws.get_all_values()[1:]  # skip header
     orders = []
     for row in data:
@@ -441,8 +448,15 @@ def update_order_status(payload: StatusUpdate, bg: BackgroundTasks):
 
 
 @app.get("/payouts", tags=["payouts"])
-def get_payouts():
-    ws = _get_or_create_sheet(PAYOUTS_SHEET_NAME, PAYOUT_HEADER)
+def get_payouts(driver: str):
+    driver_config = DRIVERS.get(driver)
+    if not driver_config:
+        raise HTTPException(status_code=404, detail="Invalid driver")
+
+    sheet_id = driver_config["sheet_id"]
+    payouts_tab = driver_config["payouts_tab"]
+
+    ws = _get_or_create_sheet(sheet_id, PAYOUT_HEADER, tab_name=payouts_tab)
     data = ws.get_all_values()[1:]
     return [
         {
@@ -457,6 +471,7 @@ def get_payouts():
         }
         for r in reversed(data)
     ]
+
     
 
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
