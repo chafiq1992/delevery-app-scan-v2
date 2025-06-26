@@ -114,6 +114,12 @@ class ManualAdd(BaseModel):
 # ───────────────────────────────────────────────────────────────
 app = FastAPI(title="Delivery FastAPI backend")
 
+# ✅ Define the path correctly
+static_path = os.path.join(os.path.dirname(__file__), "static")
+
+# ✅ Mount the /static directory
+app.mount("/static", StaticFiles(directory=static_path), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5500"],
@@ -460,6 +466,3 @@ def archive_yesterday():
         ws.clear()
         ws.append_rows(keep_rows)
     return {"archived": len(archive_rows)}
-from fastapi.staticfiles import StaticFiles
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
