@@ -413,7 +413,7 @@ def get_payouts():
     
 @app.get("/", include_in_schema=False)
 def serve_index():
-    return FileResponse("frontend/index.html")
+    return FileResponse(os.path.join(static_path, "index.html"))
     
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str):
@@ -461,5 +461,4 @@ def archive_yesterday():
         ws.append_rows(keep_rows)
     return {"archived": len(archive_rows)}
 from fastapi.staticfiles import StaticFiles
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
-
+app.mount("/static", StaticFiles(directory=static_path), name="static")
