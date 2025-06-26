@@ -19,6 +19,9 @@ from datetime import timezone
 import requests
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import gspread
 from google.oauth2.service_account import Credentials
@@ -409,8 +412,8 @@ def get_payouts():
     ]
 
 @app.get("/")
-def read_root():
-    return {"status": "FastAPI is running on Cloud Run 🚀"}
+def serve_index():
+    return FileResponse(os.path.join("frontend", "index.html"))
     
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str):
@@ -458,4 +461,5 @@ def archive_yesterday():
         ws.append_rows(keep_rows)
     return {"archived": len(archive_rows)}
 from fastapi.staticfiles import StaticFiles
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+app.mount("/static", StaticFiles(directory="frontend", html=True), name="static")
+
