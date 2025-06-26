@@ -256,7 +256,10 @@ def add_to_payout(ws_orders: gspread.Worksheet, payout_ws: gspread.Worksheet,
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok", "time": dt.datetime.utcnow().isoformat()}
-
+    
+@app.get("/login.html", response_class=HTMLResponse)
+def login_page():
+    return FileResponse("backend/app/static/login.html")  # adjust if your path is different
 
 @app.post("/scan", response_model=ScanResult, tags=["orders"])
 def scan(payload: ScanIn):
