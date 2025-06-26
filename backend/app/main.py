@@ -418,8 +418,8 @@ def get_payouts():
     ]
     
 @app.get("/", include_in_schema=False)
-def read_index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+def root():
+    return FileResponse(os.path.join(static_path, "index.html"))
     
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str):
