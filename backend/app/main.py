@@ -38,7 +38,7 @@ SCOPES         = ["https://www.googleapis.com/auth/spreadsheets"]
 credentials    = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 gc             = gspread.authorize(credentials)
 
-spreadsheet_id = os.getenv("1YwUacj73E9eiUxABLLYXvHYFeR294TdHi2-sQqd5uhY")
+spreadsheet_id = os.getenv("spreadsheet_id")
 if not spreadsheet_id:
     raise RuntimeError("Missing SPREADSHEET_ID env-var")
 ss = gc.open_by_key(spreadsheet_id)
