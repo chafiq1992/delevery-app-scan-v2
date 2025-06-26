@@ -408,7 +408,10 @@ def get_payouts():
         for r in reversed(data)
     ]
 
-
+@app.get("/")
+def read_root():
+    return {"status": "FastAPI is running on Cloud Run 🚀"}
+    
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str):
     ws = _get_or_create_sheet(PAYOUTS_SHEET_NAME, PAYOUT_HEADER)
