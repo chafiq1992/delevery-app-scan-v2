@@ -140,8 +140,22 @@
   const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
   const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
     
+  // 👇 Extract ?driver=driver1 from the URL (after login redirect)
+  const urlParams = new URLSearchParams(window.location.search);
+  const driverFromUrl = urlParams.get('driver');
+
+  // 👇 If driver is in URL, save to localStorage
+  if (driverFromUrl) {
+    localStorage.setItem("driver_id", driverFromUrl);
+  }
+
+  // 👇 Now load it from localStorage
   const driver_id = localStorage.getItem("driver_id");
-  if (!driver_id) window.location.href = "login.html";
+
+  // 👇 If still no driver_id, force to login
+  if (!driver_id) {
+    window.location.href = "login.html";
+
     
   /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
