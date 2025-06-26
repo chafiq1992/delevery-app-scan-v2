@@ -124,27 +124,26 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # 👇 ADD THIS EXACTLY BELOW
 DRIVERS = {
     "driver1": {
-        "sheet_id": "GOOGLE_SHEET_ID_1",
-        "orders_tab": "Orders1",
-        "payouts_tab": "Payouts1"
+        "sheet_id": spreadsheet_id,
+        "order_tab": "driver1_Orders",
+        "payouts_tab": "driver1_Payouts"
     },
     "driver2": {
-        "sheet_id": "GOOGLE_SHEET_ID_2",
-        "orders_tab": "Orders2",
-        "payouts_tab": "Payouts2"
+        "sheet_id": spreadsheet_id,
+        "order_tab": "driver2_Orders",
+        "payouts_tab": "driver2_Payouts"
     },
     "driver3": {
-        "sheet_id": "GOOGLE_SHEET_ID_3",
-        "orders_tab": "Orders3",
-        "payouts_tab": "Payouts3"
+        "sheet_id": spreadsheet_id,
+        "order_tab": "driver3_Orders",
+        "payouts_tab": "driver3_Payouts"
     },
     "driver4": {
-        "sheet_id": "GOOGLE_SHEET_ID_4",
-        "orders_tab": "Orders4",
-        "payouts_tab": "Payouts4"
+        "sheet_id": spreadsheet_id,
+        "order_tab": "driver4_Orders",
+        "payouts_tab": "driver4_Payouts"
     },
 }
-
 
 @app.get("/", response_class=HTMLResponse)
 async def show_login():
