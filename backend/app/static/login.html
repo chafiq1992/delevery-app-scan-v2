@@ -1,9 +1,9 @@
-<!-- LOGIN PAGE BEFORE index.html LOADS -->
+<!-- login.html -->
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Driver Login</title>
   <style>
     body {font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#f0f0f0;margin:0;}
@@ -15,29 +15,10 @@
   </style>
 </head>
 <body>
-  <div class="login-box">
+  <form class="login-box" method="POST" action="/login">
     <h2>🔒 Driver Login</h2>
-    <input id="driverCode" type="text" placeholder="Enter your driver code">
-    <button onclick="login()">Login</button>
-  </div>
-
-  <script>
-    const validDrivers = {
-      "driver1": "irrakids-driver1",
-      "driver2": "irrakids-driver2",
-      "driver3": "irranova-driver1",
-      "driver4": "irranova-driver2"
-    };
-
-    function login() {
-      const code = document.getElementById('driverCode').value.trim();
-      if (validDrivers[code]) {
-        localStorage.setItem('driver_id', code);
-        location.href = "index.html";
-      } else {
-        alert("Invalid code. Please try again.");
-      }
-    }
-  </script>
+    <input name="driver_id" type="text" placeholder="Enter your driver code" required />
+    <button type="submit">Login</button>
+  </form>
 </body>
 </html>
