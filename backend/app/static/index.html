@@ -132,7 +132,7 @@
   /* ─────────────────────────────────────────────────────────────
      1.  Tiny helper → same host as FastAPI on Render
      ────────────────────────────────────────────────────────────*/
-  const API      = "http://127.0.0.1:8000";
+  const API      = window.location.origin.replace(/\/$/, "");
   const headers  = { "Content-Type": "application/json" };
 
   const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
