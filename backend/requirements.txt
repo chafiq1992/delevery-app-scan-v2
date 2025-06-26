@@ -6,7 +6,7 @@ gunicorn==22.0.0
 httpx==0.25.2
 requests==2.32.3
 # ─── Google Sheets client
-gspread==6.2.1
+gspread==6.0.2
 google-auth==2.29.0
 google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
