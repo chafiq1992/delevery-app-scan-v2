@@ -23,22 +23,20 @@ from pydantic import BaseModel
 import gspread
 from google.oauth2.service_account import Credentials
 
-# ── decode service-account credentials from env ────────────────
+# ---   Google secret handling  ---------------------------------
 cred_b64 = os.getenv("GOOGLE_CREDENTIALS_B64", "")
 if not cred_b64:
     raise RuntimeError("Missing GOOGLE_CREDENTIALS_B64 env-var")
 
-cred_json  = base64.b64decode(cred_b64).decode("utf-8")
-creds_dict = json.loads(cred_json)
-
-SCOPES      = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-gc          = gspread.authorize(credentials)
+cred_json      = base64.b64decode(cred_b64).decode("utf-8")
+creds_dict     = json.loads(cred_json)
+SCOPES         = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials    = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+gc             = gspread.authorize(credentials)
 
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 if not spreadsheet_id:
     raise RuntimeError("Missing SPREADSHEET_ID env-var")
-
 ss = gc.open_by_key(spreadsheet_id)
 
 # ───────────────────────────────────────────────────────────────
