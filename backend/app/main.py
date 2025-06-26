@@ -376,35 +376,42 @@ def scan(payload: ScanIn):
 
 
 @app.get("/orders", tags=["orders"])
-def list_active_orders(driver: str):
-    driver_config = DRIVERS.get(driver)
-    if not driver_config:
-        raise HTTPException(status_code=404, detail="Invalid driver")
+def list_active_orders(request: Request):
+    driver_id = request.query_params.get("driver")
+    print("🔍 driver_id =", driver_id)
+    print("🧾 driver config =", driver)
+    driver = DRIVERS.get(driver_id)
+    if not driver:
+        raise HTTPException(status_code=400, detail="Invalid driver")
 
-    sheet_id = driver_config["sheet_id"]
-    order_tab = driver_config["order_tab"]
+    sheet_id = driver["sheet_id"]
+    tab_name = driver["order_tab"]
 
-    ws = _get_or_create_sheet(sheet_id, ORDER_HEADER, tab_name=order_tab)
-    data = ws.get_all_values()[1:]  # skip header
-    orders = []
-    for row in data:
-        if not row or row[9] in COMPLETED_STATUSES:
-            continue
-        orders.append({
-            "timestamp": row[0],
-            "orderName": row[1],
-            "customerName": row[2],
-            "customerPhone": row[3],
-            "address": row[4],
-            "tags": row[5],
-            "deliveryStatus": row[9] or "Dispatched",
-            "notes": row[10],
-            "scanDate": row[11],
-            "cashAmount": float(row[12] or 0),
-            "driverFee": float(row[13] or 0),
-            "payoutId": row[14],
-        })
-    return orders[::-1]  # newest first
+    try:
+        ws = _get_or_create_sheet(sheet_id, tab_name, ORDER_HEADER)
+        data = ws.get_all_values()[1:]  # skip header
+        orders = []
+        for row in data:
+            if not row or row[9] in COMPLETED_STATUSES:
+                continue
+            orders.append({
+                "timestamp": row[0],
+                "orderName": row[1],
+                "customerName": row[2],
+                "customerPhone": row[3],
+                "address": row[4],
+                "tags": row[5],
+                "deliveryStatus": row[9] or "Dispatched",
+                "notes": row[10],
+                "scanDate": row[11],
+                "cashAmount": float(row[12] or 0),
+                "driverFee": float(row[13] or 0),
+                "payoutId": row[14],
+            })
+        return orders[::-1]
+    except Exception as e:
+        print("❌ Error in /orders:", e)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @app.put("/order/status", tags=["orders"])
@@ -447,32 +454,35 @@ def update_order_status(payload: StatusUpdate, bg: BackgroundTasks):
 
 
 @app.get("/payouts", tags=["payouts"])
-def get_payouts(driver: str):
-    driver_config = DRIVERS.get(driver)
-    if not driver_config:
-        raise HTTPException(status_code=404, detail="Invalid driver")
+def get_payouts(request: Request):
+    driver_id = request.query_params.get("driver")
+    driver = DRIVERS.get(driver_id)
+    if not driver:
+        raise HTTPException(status_code=400, detail="Invalid driver")
 
-    sheet_id = driver_config["sheet_id"]
-    payouts_tab = driver_config["payouts_tab"]
+    sheet_id = driver["sheet_id"]
+    tab_name = driver["payouts_tab"]
 
-    ws = _get_or_create_sheet(sheet_id, PAYOUT_HEADER, tab_name=payouts_tab)
-    data = ws.get_all_values()[1:]
-    return [
-        {
-            "payoutId": r[0],
-            "dateCreated": r[1],
-            "orders": r[2],
-            "totalCash": float(r[3] or 0),
-            "totalFees": float(r[4] or 0),
-            "totalPayout": float(r[5] or 0),
-            "status": r[6] or "pending",
-            "datePaid": r[7],
-        }
-        for r in reversed(data)
-    ]
-
-    
-
+    try:
+        ws = _get_or_create_sheet(sheet_id, tab_name, PAYOUT_HEADER)
+        data = ws.get_all_values()[1:]
+        return [
+            {
+                "payoutId": r[0],
+                "dateCreated": r[1],
+                "orders": r[2],
+                "totalCash": float(r[3] or 0),
+                "totalFees": float(r[4] or 0),
+                "totalPayout": float(r[5] or 0),
+                "status": r[6] or "pending",
+                "datePaid": r[7],
+            }
+            for r in reversed(data)
+        ]
+    except Exception as e:
+        print("❌ Error in /payouts:", e)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+        
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str):
     ws = _get_or_create_sheet(PAYOUTS_SHEET_NAME, PAYOUT_HEADER)
