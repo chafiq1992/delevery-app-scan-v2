@@ -410,10 +410,10 @@ def get_payouts():
         }
         for r in reversed(data)
     ]
-
-@app.get("/")
+    
+@app.get("/", include_in_schema=False)
 def serve_index():
-    return FileResponse(os.path.join("frontend", "index.html"))
+    return FileResponse("frontend/index.html")
     
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str):
