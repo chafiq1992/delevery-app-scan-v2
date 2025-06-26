@@ -461,5 +461,5 @@ def archive_yesterday():
         ws.append_rows(keep_rows)
     return {"archived": len(archive_rows)}
 from fastapi.staticfiles import StaticFiles
-app.mount("/static", StaticFiles(directory="frontend", html=True), name="static")
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
