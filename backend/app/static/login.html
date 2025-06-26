@@ -1,0 +1,43 @@
+<!-- LOGIN PAGE BEFORE index.html LOADS -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Driver Login</title>
+  <style>
+    body {font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#f0f0f0;margin:0;}
+    .login-box {background:white;padding:2rem;border-radius:12px;box-shadow:0 2px 20px rgba(0,0,0,0.1);text-align:center;}
+    h2 {margin-bottom:1rem;color:#004aad;}
+    input[type="text"] {padding:0.8rem;width:100%;margin-bottom:1rem;font-size:1rem;border:2px solid #ccc;border-radius:8px;}
+    button {padding:0.8rem 1.5rem;background:#004aad;color:white;border:none;border-radius:8px;font-size:1rem;cursor:pointer;}
+    button:hover {background:#0066cc;}
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h2>🔒 Driver Login</h2>
+    <input id="driverCode" type="text" placeholder="Enter your driver code">
+    <button onclick="login()">Login</button>
+  </div>
+
+  <script>
+    const validDrivers = {
+      "driver1": "irrakids-driver1",
+      "driver2": "irrakids-driver2",
+      "driver3": "irranova-driver1",
+      "driver4": "irranova-driver2"
+    };
+
+    function login() {
+      const code = document.getElementById('driverCode').value.trim();
+      if (validDrivers[code]) {
+        localStorage.setItem('driver_id', code);
+        location.href = "index.html";
+      } else {
+        alert("Invalid code. Please try again.");
+      }
+    }
+  </script>
+</body>
+</html>
