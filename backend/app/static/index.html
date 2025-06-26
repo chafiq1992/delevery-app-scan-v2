@@ -303,7 +303,7 @@
      ────────────────────────────────────────────────────────────*/
   function loadPayouts(){
     document.getElementById('payoutsContainer').innerHTML='<div class="loading">Loading payouts...</div>';
-    apiGet("/payouts")
+    apiGet(`/payouts?driver=${driver_id}`)
       .then(displayPayouts)
       .catch(e=>document.getElementById('payoutsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
   }
