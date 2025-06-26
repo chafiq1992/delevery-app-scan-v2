@@ -46,9 +46,6 @@ ss = gc.open_by_key(spreadsheet_id)
 # ───────────────────────────────────────────────────────────────
 # CONFIGURATION  ––––– edit via env-vars in Render dashboard
 # ───────────────────────────────────────────────────────────────
-DELIVERY_GUY_NAME      = os.getenv("DELIVERY_GUY_NAME", "anouar")
-SHEET_NAME             = f"{DELIVERY_GUY_NAME}_Orders"
-PAYOUTS_SHEET_NAME     = f"{DELIVERY_GUY_NAME}_Payouts"
 
 SHOPIFY_STORES = [
     {
@@ -122,6 +119,10 @@ static_path = os.path.join(os.path.dirname(__file__), "static")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # 👇 ADD THIS EXACTLY BELOW
+
+order_tab = DRIVERS[driver]["order_tab"]
+payouts_tab = DRIVERS[driver]["payouts_tab"]
+
 DRIVERS = {
     "driver1": {
         "sheet_id": spreadsheet_id,
@@ -484,16 +485,29 @@ def get_payouts(request: Request):
         raise HTTPException(status_code=500, detail="Internal Server Error")
         
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
-def mark_payout_paid(payout_id: str):
-    ws = _get_or_create_sheet(PAYOUTS_SHEET_NAME, PAYOUT_HEADER)
-    cells = ws.findall(payout_id)
-    if not cells:
-        raise HTTPException(status_code=404, detail="Payout not found")
+def mark_payout_paid(payout_id: str, request: Request):
+    driver_id = request.query_params.get("driver")
+    driver = DRIVERS.get(driver_id)
+    if not driver:
+        raise HTTPException(status_code=400, detail="Invalid driver")
 
-    row_idx = cells[0].row
-    ws.update_cell(row_idx, 7, "paid")  # status
-    ws.update_cell(row_idx, 8, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    return {"success": True}
+    sheet_id = driver["sheet_id"]
+    tab_name = driver["payouts_tab"]
+
+    try:
+        ws = _get_or_create_sheet(sheet_id, tab_name, PAYOUT_HEADER)
+        cells = ws.findall(payout_id)
+        if not cells:
+            raise HTTPException(status_code=404, detail="Payout not found")
+
+        row_idx = cells[0].row
+        ws.update_cell(row_idx, 7, "paid")  # status
+        ws.update_cell(row_idx, 8, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        return {"success": True}
+    except Exception as e:
+        print("❌ Error in /payout/mark-paid:", e)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @app.post("/archive-yesterday", tags=["maintenance"])
