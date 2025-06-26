@@ -118,7 +118,8 @@ app = FastAPI(title="Delivery FastAPI backend")
 static_path = os.path.join(os.path.dirname(__file__), "static")
 
 # ✅ Mount the /static directory
-app.mount("/static", StaticFiles(directory=static_path), name="static")
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 app.add_middleware(
     CORSMiddleware,
