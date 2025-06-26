@@ -23,7 +23,23 @@ from pydantic import BaseModel
 import gspread
 from google.oauth2.service_account import Credentials
 
+# ── decode service-account credentials from env ────────────────
+cred_b64 = os.getenv("GOOGLE_CREDENTIALS_B64", "")
+if not cred_b64:
+    raise RuntimeError("Missing GOOGLE_CREDENTIALS_B64 env-var")
 
+cred_json  = base64.b64decode(cred_b64).decode("utf-8")
+creds_dict = json.loads(cred_json)
+
+SCOPES      = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+gc          = gspread.authorize(credentials)
+
+spreadsheet_id = os.getenv("SPREADSHEET_ID")
+if not spreadsheet_id:
+    raise RuntimeError("Missing SPREADSHEET_ID env-var")
+
+ss = gc.open_by_key(spreadsheet_id)
 
 # ───────────────────────────────────────────────────────────────
 # CONFIGURATION  ––––– edit via env-vars in Render dashboard
@@ -56,23 +72,6 @@ COMPLETED_STATUSES  = ["Livré", "Annulé", "Refusé"]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
-# Google-Service-Account credentials JSON (Render env-var, **not** a file path)
-cred_b64 = os.getenv("GOOGLE_CREDENTIALS_B64", "")
-# Bail out early if the secret is missing
-if not cred_b64:
-    raise RuntimeError("Missing GOOGLE_CREDENTIALS_B64 env-var")
-
-cred_json = base64.b64decode(cred_b64).decode()
-
-SCOPES         = ["https://www.googleapis.com/auth/spreadsheets"]
-creds_dict     = json.loads(cred_json)
-credentials    = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-gc             = gspread.authorize(credentials)
-spreadsheet_id = os.getenv("SPREADSHEET_ID")
-if not spreadsheet_id:
-    raise RuntimeError("Add 'spreadsheet_id' key to your service-account JSON")
-
-ss = gc.open_by_key(spreadsheet_id)
 
 
 def _get_or_create_sheet(sheet_name: str, header: List[str]) -> gspread.Worksheet:
