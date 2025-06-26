@@ -15,7 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend /app
 
 # 3) uvicorn via gunicorn  ──────────────────────────────────────
+# Render exposes $PORT automatically
 ENV PYTHONUNBUFFERED=true \
-    PORT=10000                           # Render exposes this automatically
+    PORT=10000
 
 CMD ["gunicorn", "-c", "gunicorn_conf.py", "app.main:app"]
