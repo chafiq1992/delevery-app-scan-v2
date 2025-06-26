@@ -139,7 +139,10 @@
   const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
   const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
   const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
-
+    
+  const driver_id = localStorage.getItem("driver_id");
+  if (!driver_id) window.location.href = "login.html";
+    
   /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
      ────────────────────────────────────────────────────────────*/
