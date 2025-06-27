@@ -130,33 +130,35 @@
   </div>
 
   <script>
-  /* ─────────────────────────────────────────────────────────────
-     1.  Tiny helper → same host as FastAPI on Render
-     ────────────────────────────────────────────────────────────*/
-  const API      = window.location.origin.replace(/\/$/, "");
-  const headers  = { "Content-Type": "application/json" };
+    document.addEventListener('DOMContentLoaded', function () {
+      /* ─────────────────────────────────────────────────────────────
+         1.  Tiny helper → same host as FastAPI on Render
+         ────────────────────────────────────────────────────────────*/
+      const API      = window.location.origin.replace(/\/$/, "");
+      const headers  = { "Content-Type": "application/json" };
 
-  const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
-  const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
-  const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
-    
-  // 👇 Extract ?driver=driver1 from the URL (after login redirect)
-  const urlParams = new URLSearchParams(window.location.search);
-  const driverFromUrl = urlParams.get('driver');
+      const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
+      const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
+      const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
 
-  // 👇 If driver is in URL, save to localStorage
-  if (driverFromUrl) {
-    localStorage.setItem("driver_id", driverFromUrl);
-  }
+      // 👇 Extract ?driver=driver1 from the URL (after login redirect)
+      const urlParams = new URLSearchParams(window.location.search);
+      const driverFromUrl = urlParams.get('driver');
 
-  // 👇 Now load it from localStorage
-  const driver_id = localStorage.getItem("driver_id");
+      // 👇 If driver is in URL, save to localStorage
+      if (driverFromUrl) {
+        localStorage.setItem("driver_id", driverFromUrl);
+      }
 
-  // 👇 If still no driver_id, force to login
-  if (!driver_id) {
-    window.location.href = `${window.location.origin}/login.html`;
-    return; // stop further execution if no driver
-  }
+      // 👇 Now load it from localStorage
+      const driver_id = localStorage.getItem("driver_id");
+
+      // 👇 If still no driver_id, force to login
+      if (!driver_id) {
+        window.location.href = `${window.location.origin}/login.html`;
+        return; // stop further execution if no driver
+      }
+
     
   /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
