@@ -379,6 +379,7 @@ def scan(payload: ScanIn):
 @app.get("/orders", tags=["orders"])
 def list_active_orders(request: Request):
     driver_id = request.query_params.get("driver")
+    driver = DRIVERS.get(driver_id)
     print("🔍 driver_id =", driver_id)
     print("🧾 driver config =", driver)
     driver = DRIVERS.get(driver_id)
@@ -389,7 +390,7 @@ def list_active_orders(request: Request):
     tab_name = driver["order_tab"]
 
     try:
-        ws = _get_or_create_sheet(sheet_id, tab_name, ORDER_HEADER)
+        ws = _get_or_create_sheet(tab_name, ORDER_HEADER)
         data = ws.get_all_values()[1:]  # skip header
         orders = []
         for row in data:
