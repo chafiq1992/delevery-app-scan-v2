@@ -378,6 +378,19 @@
       .catch(e=>alert('Error marking payout: '+e));
   }
 
+  // Expose functions globally for inline handlers
+  Object.assign(window, {
+    showTab,
+    startScanner,
+    manualAdd,
+    loadOrders,
+    updateOrderStatus,
+    updateOrderNotes,
+    updateCashAmount,
+    loadPayouts,
+    markPayoutPaid
+  });
+
   /* ─────────────────────────────────────────────────────────────
      9.  Helper – tag mapping  (unchanged)
      ────────────────────────────────────────────────────────────*/
