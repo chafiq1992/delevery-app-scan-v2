@@ -165,6 +165,7 @@
      ────────────────────────────────────────────────────────────*/
   let scanner, orders = [], payouts = [];
   const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
+  const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
 
   /* ─────────────────────────────────────────────────────────────
      3.  Navigation tabs (unchanged UI, but auto-refreshes)
@@ -338,14 +339,15 @@
     const totalCash  = active.reduce((s,p)=>s+p.totalCash ,0);
     const totalFees  = active.reduce((s,p)=>s+p.totalFees ,0);
     const totalPayout= active.reduce((s,p)=>s+p.totalPayout,0);
+    const pendingCnt = active.length;
 
     let h = `
       <div class="payout-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">💰 Payout Summary</h2>
         <div class="summary-grid">
-          <div class="summary-item"><div class="summary-label">Total Cash</div><div class="summary-value">${totalCash} DH</div></div>
-          <div class="summary-item"><div class="summary-label">Total Fees</div><div class="summary-value">${totalFees} DH</div></div>
-          <div class="summary-item"><div class="summary-label">Net Payout</div><div class="summary-value">${totalPayout} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Total Cash</div><div class="summary-value">${formatMoney(totalCash)} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Total Fees</div><div class="summary-value">${formatMoney(totalFees)} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Net Payout</div><div class="summary-value">${formatMoney(totalPayout)} DH</div></div>
           <div class="summary-item"><div class="summary-label">Pending</div><div class="summary-value">${pendingCnt}</div></div>
         </div>
       </div>`;
@@ -359,9 +361,9 @@
           <div class="payout-status ${paid?'status-paid':'status-pending'}">${paid?'✅ Paid':'⏳ Pending'}</div>
         </div>
         <div class="payout-details">
-          <div class="detail-item"><div class="detail-label">Cash</div><div class="detail-value">${p.totalCash} DH</div></div>
-          <div class="detail-item"><div class="detail-label">Fees</div><div class="detail-value">${p.totalFees} DH</div></div>
-          <div class="detail-item"><div class="detail-label">Net</div><div class="detail-value" style="color:#2e7d32;font-weight:bold">${p.totalPayout} DH</div></div>
+          <div class="detail-item"><div class="detail-label">Cash</div><div class="detail-value">${formatMoney(p.totalCash)} DH</div></div>
+          <div class="detail-item"><div class="detail-label">Fees</div><div class="detail-value">${formatMoney(p.totalFees)} DH</div></div>
+          <div class="detail-item"><div class="detail-label">Net</div><div class="detail-value" style="color:#2e7d32;font-weight:bold">${formatMoney(p.totalPayout)} DH</div></div>
           <div class="detail-item"><div class="detail-label">Orders</div><div class="detail-value">${ordersArr.length}</div></div>
         </div>
         <div class="payout-orders">
