@@ -123,25 +123,25 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 DRIVERS = {
-    "driver1": {
+    "abderrehman": {
         "sheet_id": spreadsheet_id,
-        "order_tab": "driver1_Orders",
-        "payouts_tab": "driver1_Payouts"
+        "order_tab": "abderrehman_Orders",
+        "payouts_tab": "abderrehman_Payouts"
     },
-    "driver2": {
+    "anouar": {
         "sheet_id": spreadsheet_id,
-        "order_tab": "driver2_Orders",
-        "payouts_tab": "driver2_Payouts"
+        "order_tab": "anouar_Orders",
+        "payouts_tab": "anouar_Payouts"
     },
-    "driver3": {
+    "mohammed": {
         "sheet_id": spreadsheet_id,
-        "order_tab": "driver3_Orders",
-        "payouts_tab": "driver3_Payouts"
+        "order_tab": "mohammed_Orders",
+        "payouts_tab": "mohammed_Payouts"
     },
-    "driver4": {
+    "nizar": {
         "sheet_id": spreadsheet_id,
-        "order_tab": "driver4_Orders",
-        "payouts_tab": "driver4_Payouts"
+        "order_tab": "nizar_Orders",
+        "payouts_tab": "nizar_Payouts"
     },
 }
 
