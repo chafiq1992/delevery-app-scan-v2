@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+
 from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 import gspread
@@ -288,61 +289,72 @@ def add_to_payout(ws_orders: gspread.Worksheet, payout_ws: gspread.Worksheet,
 # ───────────────────────────────────────────────────────────────
 # FastAPI ROUTES
 # ───────────────────────────────────────────────────────────────
+def _tabs_for(driver_id: str):
+    cfg = DRIVERS.get(driver_id)
+    if not cfg:
+        raise HTTPException(status_code=400, detail="Invalid driver")
+    return (
+        _get_or_create_sheet(cfg["order_tab"],  ORDER_HEADER),
+        _get_or_create_sheet(cfg["payouts_tab"], PAYOUT_HEADER)
+    )
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok", "time": dt.datetime.utcnow().isoformat()}
-    
-@app.get("/login.html", response_class=HTMLResponse)
-def login_page():
-    return FileResponse("backend/app/static/login.html")  # adjust if your path is different
 
+# -------------------------------  SCAN  -------------------------------
 @app.post("/scan", response_model=ScanResult, tags=["orders"])
-def scan(payload: ScanIn):
-    barcode = payload.barcode
-    """
-    Scan a barcode (or manual order name).
-    Replicates `appendScan()` logic.
-    """
-    ws = _get_or_create_sheet(SHEET_NAME, ORDER_HEADER)
+def scan(
+    payload: ScanIn,
+    driver: str = Query(..., description="driver1 / driver2 / …")
+):
+    ws_orders, _ = _tabs_for(driver)
+    barcode = payload.barcode.strip()
+    order_number = "#" + "".join(filter(str.isdigit, barcode))
 
-    order_number = "#" + "".join(filter(str.isdigit, barcode.strip()))
     if len(order_number) <= 1:
         raise HTTPException(status_code=400, detail="Invalid barcode")
 
     # already scanned?
-    if order_exists(ws, order_number):
-        existing = get_order_row(ws, order_number)
+    if order_exists(ws_orders, order_number):
+        existing = get_order_row(ws_orders, order_number)
         return ScanResult(
-            result="⚠️ Already Scanned",
+            result="⚠️ Already scanned",
             order=order_number,
             tag=get_primary_display_tag(existing[5]),
             deliveryStatus=existing[9],
         )
 
-    # Shopify look-up – last 50 days window
+    # --- Shopify look-up (unchanged) ----------------------------------
     window_start = dt.datetime.now(timezone.utc) - dt.timedelta(days=50)
-    chosen_order = None
-    chosen_store_name = ""
+    chosen_order, chosen_store_name = None, ""
     for store in SHOPIFY_STORES:
         order = get_order_from_store(order_number, store)
-        if not order:
-            continue
-        created_at = dt.datetime.fromisoformat(order["created_at"].replace("Z", "+00:00"))
-        if created_at >= window_start and (not chosen_order or created_at > dt.datetime.fromisoformat(chosen_order["created_at"].replace("Z", "+00:00"))):
-            chosen_order = order
-            chosen_store_name = store["name"]
+        if order:
+            created_at = dt.datetime.fromisoformat(
+                order["created_at"].replace("Z", "+00:00")
+            )
+            if created_at >= window_start and (
+                not chosen_order
+                or created_at > dt.datetime.fromisoformat(
+                    chosen_order["created_at"].replace("Z", "+00:00")
+                )
+            ):
+                chosen_order, chosen_store_name = order, store["name"]
 
-    # default values
-    tags = fulfillment = order_status = customer_name = phone = address = ""
+    # --- sheet append (same logic, but to the driver tab) -------------
+    tags = chosen_order.get("tags", "") if chosen_order else ""
+    fulfillment = chosen_order.get("fulfillment_status", "unfulfilled") if chosen_order else ""
+    order_status = "closed" if (chosen_order and chosen_order.get("cancelled_at")) else "open"
+    customer_name = phone = address = ""
     cash_amount = 0.0
-    result_msg = "❌ Not Found"
+    result_msg = "❌ Not found"
 
     if chosen_order:
-        tags = chosen_order.get("tags", "")
-        fulfillment = chosen_order.get("fulfillment_status", "unfulfilled")
-        order_status = "closed" if chosen_order.get("cancelled_at") else "open"
-        result_msg = "⚠️ Cancelled" if chosen_order.get("cancelled_at") else (
-            "❌ Unfulfilled" if fulfillment != "fulfilled" else "✅ OK"
+        result_msg = (
+            "⚠️ Cancelled" if chosen_order.get("cancelled_at")
+            else "❌ Unfulfilled" if fulfillment != "fulfilled"
+            else "✅ OK"
         )
         cash_amount = float(chosen_order.get("total_price") or 0)
         if chosen_order.get("shipping_address"):
@@ -354,159 +366,112 @@ def scan(payload: ScanIn):
                 sa.get("city"), sa.get("province")
             ]))
 
+    now_ts   = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    scan_day = dt.datetime.now().strftime("%Y-%m-%d")
     driver_fee = calculate_driver_fee(tags)
-    now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    scan_date = dt.datetime.now().strftime("%Y-%m-%d")
 
-    # Actually append row
-    new_row = [
+    ws_orders.append_row([
         now_ts, order_number, customer_name, phone, address, tags, fulfillment,
-        order_status, chosen_store_name, "Dispatched", "", scan_date,
+        order_status, chosen_store_name, "Dispatched", "", scan_day,
         cash_amount, driver_fee, ""
-    ]
-    ws.append_row(new_row)
+    ])
 
     return ScanResult(
         result=result_msg,
         order=order_number,
         tag=get_primary_display_tag(tags),
-        deliveryStatus="Dispatched"
+        deliveryStatus="Dispatched",
     )
 
-
+# -----------------------------  ORDERS  -------------------------------
 @app.get("/orders", tags=["orders"])
-def list_active_orders(request: Request):
-    driver_id = request.query_params.get("driver")
-    driver = DRIVERS.get(driver_id)
-    print("🔍 driver_id =", driver_id)
-    print("🧾 driver config =", driver)
-    driver = DRIVERS.get(driver_id)
-    if not driver:
-        raise HTTPException(status_code=400, detail="Invalid driver")
-
-    sheet_id = driver["sheet_id"]
-    tab_name = driver["order_tab"]
-
-    try:
-        ws = _get_or_create_sheet(tab_name, ORDER_HEADER)
-        data = ws.get_all_values()[1:]  # skip header
-        orders = []
-        for row in data:
-            if not row or row[9] in COMPLETED_STATUSES:
-                continue
-            orders.append({
-                "timestamp": row[0],
-                "orderName": row[1],
-                "customerName": row[2],
-                "customerPhone": row[3],
-                "address": row[4],
-                "tags": row[5],
-                "deliveryStatus": row[9] or "Dispatched",
-                "notes": row[10],
-                "scanDate": row[11],
-                "cashAmount": float(row[12] or 0),
-                "driverFee": float(row[13] or 0),
-                "payoutId": row[14],
-            })
-        return orders[::-1]
-    except Exception as e:
-        print("❌ Error in /orders:", e)
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-
+def list_active_orders(driver: str = Query(...)):
+    ws_orders, _ = _tabs_for(driver)
+    data = ws_orders.get_all_values()[1:]  # skip header
+    active = []
+    for r in data:
+        if not r or r[9] in COMPLETED_STATUSES:
+            continue
+        active.append({
+            "timestamp":    r[0],
+            "orderName":    r[1],
+            "customerName": r[2],
+            "customerPhone":r[3],
+            "address":      r[4],
+            "tags":         r[5],
+            "deliveryStatus": r[9] or "Dispatched",
+            "notes":        r[10],
+            "scanDate":     r[11],
+            "cashAmount":   float(r[12] or 0),
+            "driverFee":    float(r[13] or 0),
+            "payoutId":     r[14],
+        })
+    return list(reversed(active))
 
 @app.put("/order/status", tags=["orders"])
-def update_order_status(payload: StatusUpdate, bg: BackgroundTasks):
+def update_order_status(
+    payload: StatusUpdate,
+    bg: BackgroundTasks,
+    driver: str = Query(...)
+):
     if payload.new_status and payload.new_status not in DELIVERY_STATUSES:
-        raise HTTPException(status_code=400, detail="Invalid new_status")
+        raise HTTPException(status_code=400, detail="Invalid status")
 
-    ws = _get_or_create_sheet(SHEET_NAME, ORDER_HEADER)
-    payout_ws = _get_or_create_sheet(PAYOUTS_SHEET_NAME, PAYOUT_HEADER)
-
-    cells = ws.findall(payload.order_name)
+    ws_orders, ws_payouts = _tabs_for(driver)
+    cells = ws_orders.findall(payload.order_name)
     if not cells:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    row_idx = cells[0].row
-    row_values = ws.row_values(row_idx)
+    row = cells[0].row
+    row_vals = ws_orders.row_values(row)
 
-    # update delivery status
     if payload.new_status:
-        ws.update_cell(row_idx, 10, payload.new_status)  # column J
-    # update notes
+        ws_orders.update_cell(row, 10, payload.new_status)
     if payload.note is not None:
-        ws.update_cell(row_idx, 11, payload.note)
-    # update cash amount
+        ws_orders.update_cell(row, 11, payload.note)
     if payload.cash_amount is not None:
-        ws.update_cell(row_idx, 13, payload.cash_amount)
+        ws_orders.update_cell(row, 13, payload.cash_amount)
 
-    # handle payout on Livré
-    if payload.new_status == "Livré" and row_values[9] != "Livré":
-        tags = row_values[5]
-        driver_fee = calculate_driver_fee(tags)
-        cash_amt = payload.cash_amount or float(row_values[12] or 0)
-        add_to_payout(ws, payout_ws, payload.order_name, cash_amt, driver_fee)
+    # add to payout if freshly delivered
+    if payload.new_status == "Livré" and row_vals[9] != "Livré":
+        driver_fee = calculate_driver_fee(row_vals[5])
+        cash_amt = payload.cash_amount or float(row_vals[12] or 0)
+        add_to_payout(ws_orders, ws_payouts,
+                      payload.order_name, cash_amt, driver_fee)
 
-    # remove from dashboard on Returned
+    # clean up list if returned
     if payload.new_status == "Returned":
-        ws.delete_rows(row_idx, row_idx)
+        ws_orders.delete_rows(row, row)
 
     return {"success": True}
 
-
+# ----------------------------  PAYOUTS  -------------------------------
 @app.get("/payouts", tags=["payouts"])
-def get_payouts(request: Request):
-    driver_id = request.query_params.get("driver")
-    driver = DRIVERS.get(driver_id)
-    if not driver:
-        raise HTTPException(status_code=400, detail="Invalid driver")
+def get_payouts(driver: str = Query(...)):
+    _, ws_payouts = _tabs_for(driver)
+    rows = ws_payouts.get_all_values()[1:]
+    return [{
+        "payoutId":   r[0],
+        "dateCreated":r[1],
+        "orders":     r[2],
+        "totalCash":  float(r[3] or 0),
+        "totalFees":  float(r[4] or 0),
+        "totalPayout":float(r[5] or 0),
+        "status":     r[6] or "pending",
+        "datePaid":   r[7],
+    } for r in reversed(rows)]
 
-    sheet_id = driver["sheet_id"]
-    tab_name = driver["payouts_tab"]
-
-    try:
-        ws = _get_or_create_sheet(sheet_id, tab_name, PAYOUT_HEADER)
-        data = ws.get_all_values()[1:]
-        return [
-            {
-                "payoutId": r[0],
-                "dateCreated": r[1],
-                "orders": r[2],
-                "totalCash": float(r[3] or 0),
-                "totalFees": float(r[4] or 0),
-                "totalPayout": float(r[5] or 0),
-                "status": r[6] or "pending",
-                "datePaid": r[7],
-            }
-            for r in reversed(data)
-        ]
-    except Exception as e:
-        print("❌ Error in /payouts:", e)
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-        
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
-def mark_payout_paid(payout_id: str, request: Request):
-    driver_id = request.query_params.get("driver")
-    driver = DRIVERS.get(driver_id)
-    if not driver:
-        raise HTTPException(status_code=400, detail="Invalid driver")
+def mark_payout_paid(payout_id: str, driver: str = Query(...)):
+    _, ws_payouts = _tabs_for(driver)
+    cells = ws_payouts.findall(payout_id)
+    if not cells:
+        raise HTTPException(status_code=404, detail="Payout not found")
 
-    sheet_id = driver["sheet_id"]
-    tab_name = driver["payouts_tab"]
-
-    try:
-        ws = _get_or_create_sheet(sheet_id, tab_name, PAYOUT_HEADER)
-        cells = ws.findall(payout_id)
-        if not cells:
-            raise HTTPException(status_code=404, detail="Payout not found")
-
-        row_idx = cells[0].row
-        ws.update_cell(row_idx, 7, "paid")  # status
-        ws.update_cell(row_idx, 8, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-        return {"success": True}
-    except Exception as e:
-        print("❌ Error in /payout/mark-paid:", e)
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    row = cells[0].row
+    ws_payouts.update_cell(row, 7, "paid")
+    ws_payouts.update_cell(row, 8, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    return {"success": True}
 
 
 @app.post("/archive-yesterday", tags=["maintenance"])
