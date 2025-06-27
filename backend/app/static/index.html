@@ -334,10 +334,10 @@
     if(!payouts.length){
       c.innerHTML='<div class="no-orders">💰 No payouts found.</div>'; return;
     }
-    const totalCash  = payouts.reduce((s,p)=>s+p.totalCash ,0);
-    const totalFees  = payouts.reduce((s,p)=>s+p.totalFees ,0);
-    const totalPayout= payouts.reduce((s,p)=>s+p.totalPayout,0);
-    const pendingCnt = payouts.filter(p=>p.status!=='paid'&&p.status!=='Paid').length;
+    const active = payouts.filter(p=>p.status!=='paid' && p.status!=='Paid');
+    const totalCash  = active.reduce((s,p)=>s+p.totalCash ,0);
+    const totalFees  = active.reduce((s,p)=>s+p.totalFees ,0);
+    const totalPayout= active.reduce((s,p)=>s+p.totalPayout,0);
 
     let h = `
       <div class="payout-summary">
