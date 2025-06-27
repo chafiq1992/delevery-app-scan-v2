@@ -441,7 +441,7 @@ def update_order_status(
 
     # clean up list if returned
     if payload.new_status == "Returned":
-        ws_orders.delete_rows(row, row)
+        pass
 
     return {"success": True}
 
