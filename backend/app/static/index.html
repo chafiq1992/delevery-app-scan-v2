@@ -197,7 +197,7 @@
           document.getElementById('reader').style.display="none";
           document.getElementById('againBtn').style.display="block";
           document.getElementById('result').innerHTML='⏳ Processing scan…';
-          apiPost("/scan", { barcode: code })
+          apiPost(`/scan?driver=${driver_id}`, { barcode: code })
             .then(handleScanResult)
             .catch(err => handleScanError(err));
         });
@@ -214,7 +214,7 @@
     const code = document.getElementById('manualOrderInput').value.trim();
     if(!code){alert('Enter the order number first');return;}
     document.getElementById('result').innerHTML='⏳ Adding order…';
-    apiPost("/scan", { barcode: code })
+    apiPost(`/scan?driver=${driver_id}`, { barcode: code })
       .then(handleScanResult)
       .catch(handleScanError);
   }
@@ -373,7 +373,7 @@
   }
 
   function markPayoutPaid(payoutId){
-    apiPost(`/payout/mark-paid/${payoutId}`)
+    apiPost(`/payout/mark-paid/${p.payoutId}?driver=${driver_id}`)
       .then(()=>{ loadPayouts(); alert('✅ Payout marked as paid'); })
       .catch(e=>alert('Error marking payout: '+e));
   }
