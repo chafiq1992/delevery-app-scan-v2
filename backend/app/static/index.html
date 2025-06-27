@@ -155,7 +155,8 @@
   // 👇 If still no driver_id, force to login
   if (!driver_id) {
     window.location.href = "login.html";
-
+    return; // stop further execution if no driver
+  }
     
   /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
