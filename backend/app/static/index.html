@@ -373,9 +373,13 @@
   }
 
   function markPayoutPaid(payoutId){
-    apiPost(`/payout/mark-paid/${p.payoutId}?driver=${driver_id}`)
-      .then(()=>{ loadPayouts(); alert('✅ Payout marked as paid'); })
-      .catch(e=>alert('Error marking payout: '+e));
+    const url = `/payout/mark-paid/${encodeURIComponent(payoutId)}?driver=${driver_id}`;
+     apiPost(url)
+       .then(() => {
+         alert('✅ Payout marked as paid');
+         loadPayouts();          // refresh the list
+       })
+      .catch(e => alert('Error marking payout: ' + e));
   }
 
   // Expose functions globally for inline handlers
