@@ -120,8 +120,6 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # 👇 ADD THIS EXACTLY BELOW
 
-order_tab = DRIVERS[driver]["order_tab"]
-payouts_tab = DRIVERS[driver]["payouts_tab"]
 
 DRIVERS = {
     "driver1": {
