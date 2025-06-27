@@ -295,7 +295,8 @@
      7.  Orders – update endpoints
      ────────────────────────────────────────────────────────────*/
   function updateOrderStatus(orderName,newStatus,selectEl){
-    apiPut("/order/status", {order_name:orderName,new_status:newStatus})
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, new_status: newStatus})
       .then(()=>{
         const card = selectEl.closest('.order-card');
         if(newStatus==='Livré'){ card.classList.add('delivered'); loadPayouts(); }
@@ -305,13 +306,15 @@
   }
 
   function updateOrderNotes(orderName,note){
-    apiPut("/order/status", {order_name:orderName,note})
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, note})
       .catch(e=>alert('Error updating notes: '+e));
   }
 
   function updateCashAmount(orderName,amount){
     const cash = parseFloat(amount)||0;
-    apiPut("/order/status", {order_name:orderName,cash_amount:cash})
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, cash_amount: cash})
       .catch(e=>alert('Error updating cash amount: '+e));
   }
 
