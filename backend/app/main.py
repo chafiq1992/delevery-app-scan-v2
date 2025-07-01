@@ -122,7 +122,6 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # 👇 ADD THIS EXACTLY BELOW
 
-
 DRIVERS = {
     "abderrehman": {
         "sheet_id": spreadsheet_id,
@@ -146,6 +145,9 @@ DRIVERS = {
     },
 }
 
+# Simple admin password (override via env var)
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+
 # In-memory caches for orders and payouts
 orders_cache = TTLCache(maxsize=8, ttl=30)
 payouts_cache = TTLCache(maxsize=8, ttl=30)
@@ -154,12 +156,30 @@ payouts_cache = TTLCache(maxsize=8, ttl=30)
 async def show_login():
     return FileResponse(os.path.join(STATIC_DIR, "login.html"))
 
+
+@app.get("/admin", response_class=HTMLResponse)
+async def show_admin_login():
+    return FileResponse(os.path.join(STATIC_DIR, "admin_login.html"))
+
 @app.post("/login", response_class=HTMLResponse)
 async def login(driver_id: str = Form(...)):
     if driver_id in DRIVERS:
         response = RedirectResponse(url=f"/static/index.html?driver={driver_id}", status_code=302)
         return response
     return HTMLResponse("<h2>Invalid driver ID</h2>", status_code=401)
+
+
+@app.post("/admin/login")
+async def admin_login(password: str = Form(...)):
+    if password == ADMIN_PASSWORD:
+        return {"success": True}
+    raise HTTPException(status_code=401, detail="Invalid admin password")
+
+@app.get("/drivers")
+def list_drivers():
+    """Return list of driver IDs."""
+    return list(DRIVERS.keys())
+
 
 # Allow cross-origin requests
 app.add_middleware(
@@ -524,12 +544,11 @@ def mark_payout_paid(payout_id: str, driver: str = Query(...)):
 
 
 # ----------------------------  STATS  -------------------------------
-@app.get("/stats", tags=["stats"])
-def get_stats(driver: str = Query(...), days: int = Query(15)):
+def _compute_stats(driver: str, days: int) -> dict:
     ws_orders, _ = _tabs_for(driver)
     rows = ws_orders.get_all_values()[1:]
     if days > 0:
-        start = dt.datetime.now().date() - dt.timedelta(days=days-1)
+        start = dt.datetime.now().date() - dt.timedelta(days=days - 1)
     else:
         start = None
 
@@ -555,7 +574,7 @@ def get_stats(driver: str = Query(...), days: int = Query(15)):
         elif status in ("Returned", "Annulé", "Refusé"):
             returned += 1
 
-    rate = (delivered/total*100) if total else 0
+    rate = (delivered / total * 100) if total else 0
     return {
         "totalOrders": total,
         "delivered": delivered,
@@ -564,6 +583,16 @@ def get_stats(driver: str = Query(...), days: int = Query(15)):
         "totalFees": fees,
         "deliveryRate": rate,
     }
+
+
+@app.get("/stats", tags=["stats"])
+def get_stats(driver: str = Query(...), days: int = Query(15)):
+    return _compute_stats(driver, days)
+
+
+@app.get("/admin/stats", tags=["admin"])
+def admin_stats(days: int = Query(15)):
+    return {d: _compute_stats(d, days) for d in DRIVERS.keys()}
 
 
 @app.post("/archive-yesterday", tags=["maintenance"])
