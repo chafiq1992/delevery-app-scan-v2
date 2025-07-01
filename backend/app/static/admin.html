@@ -7,13 +7,28 @@
   <style>
     body{font-family:sans-serif;margin:0;padding:1rem;background:#f5f7fa;}
     h1{text-align:center;margin-bottom:1rem;color:#004aad;}
+    .controls{display:flex;justify-content:center;margin-bottom:1rem;gap:0.5rem;flex-wrap:wrap}
+    select{padding:0.5rem;font-size:1rem;border-radius:6px}
     table{width:100%;border-collapse:collapse;background:white;box-shadow:0 2px 10px rgba(0,0,0,0.1);}
     th,td{padding:0.6rem 0.8rem;border-bottom:1px solid #ddd;text-align:center;}
     th{background:#004aad;color:white;}
+    @media(max-width:600px){table,th,td{font-size:0.9rem}}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <h1>Admin Dashboard</h1>
+  <div class="controls">
+    <label>Range:
+      <select id="rangeSel" onchange="loadAll()">
+        <option value="7">7d</option>
+        <option value="15" selected>15d</option>
+        <option value="30">30d</option>
+        <option value="0">All</option>
+      </select>
+    </label>
+  </div>
+
   <table id="statsTable">
     <thead>
       <tr>
@@ -24,28 +39,58 @@
         <th>Delivery Rate</th>
         <th>Total Collect</th>
         <th>Total Fees</th>
+        <th>Active Orders</th>
+        <th>Unpaid Payout</th>
       </tr>
     </thead>
     <tbody id="statsBody"></tbody>
   </table>
 
+  <canvas id="statsChart" style="max-width:600px;margin:2rem auto;display:block;"></canvas>
+
   <script>
-    fetch('/admin/stats')
-      .then(r=>r.json())
-      .then(data=>{
-        const body=document.getElementById('statsBody');
-        Object.entries(data).forEach(([driver,s])=>{
-          const tr=document.createElement('tr');
-          tr.innerHTML=`<td>${driver}</td>
-                         <td>${s.totalOrders}</td>
-                         <td>${s.delivered}</td>
-                         <td>${s.returned}</td>
-                         <td>${s.deliveryRate.toFixed(0)}%</td>
-                         <td>${s.totalCollect.toFixed(2)}</td>
-                         <td>${s.totalFees.toFixed(2)}</td>`;
-          body.appendChild(tr);
-        });
-      });
+    async function loadAll(){
+      const range=document.getElementById('rangeSel').value||15;
+      const stats=await fetch(`/admin/stats?days=${range}`).then(r=>r.json());
+      const drivers=await fetch('/drivers').then(r=>r.json());
+
+      const tbody=document.getElementById('statsBody');
+      tbody.innerHTML='';
+      const chartLabels=[], chartData=[];
+
+      for(const d of drivers){
+        const s=stats[d]||{};
+        const orders=await fetch(`/orders?driver=${d}`).then(r=>r.json()).catch(()=>[]);
+        const payouts=await fetch(`/payouts?driver=${d}`).then(r=>r.json()).catch(()=>[]);
+        const unpaid=payouts.filter(p=>String(p.status||'').toLowerCase()!=='paid')
+                           .reduce((sum,p)=>sum+(parseFloat(p.totalPayout)||0),0);
+
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${d}</td>
+                      <td>${s.totalOrders||0}</td>
+                      <td>${s.delivered||0}</td>
+                      <td>${s.returned||0}</td>
+                      <td>${(s.deliveryRate||0).toFixed(0)}%</td>
+                      <td>${(s.totalCollect||0).toFixed(2)}</td>
+                      <td>${(s.totalFees||0).toFixed(2)}</td>
+                      <td>${orders.length}</td>
+                      <td>${unpaid.toFixed(2)}</td>`;
+        tbody.appendChild(tr);
+
+        chartLabels.push(d);
+        chartData.push(s.delivered||0);
+      }
+
+      renderChart(chartLabels,chartData);
+    }
+
+    function renderChart(labels,data){
+      const ctx=document.getElementById('statsChart');
+      if(window.statsChart) window.statsChart.destroy();
+      window.statsChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Delivered',data,backgroundColor:'#4caf50'}]},options:{responsive:true,maintainAspectRatio:false}});
+    }
+
+    loadAll();
   </script>
 </body>
 </html>
