@@ -20,6 +20,7 @@ import requests
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request, Form
+from cachetools import TTLCache
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -144,6 +145,10 @@ DRIVERS = {
         "payouts_tab": "nizar_Payouts"
     },
 }
+
+# In-memory caches for orders and payouts
+orders_cache = TTLCache(maxsize=8, ttl=30)
+payouts_cache = TTLCache(maxsize=8, ttl=30)
 
 @app.get("/", response_class=HTMLResponse)
 async def show_login():
@@ -376,6 +381,10 @@ def scan(
         cash_amount, driver_fee, ""
     ])
 
+    # invalidate caches for this driver
+    orders_cache.pop(driver, None)
+    payouts_cache.pop(driver, None)
+
     return ScanResult(
         result=result_msg,
         order=order_number,
@@ -386,6 +395,9 @@ def scan(
 # -----------------------------  ORDERS  -------------------------------
 @app.get("/orders", tags=["orders"])
 def list_active_orders(driver: str = Query(...)):
+    if driver in orders_cache:
+        return orders_cache[driver]
+
     ws_orders, _ = _tabs_for(driver)
     data = ws_orders.get_all_values()[1:]  # skip header
     active = []
@@ -406,7 +418,9 @@ def list_active_orders(driver: str = Query(...)):
             "driverFee":    float(r[13] or 0),
             "payoutId":     r[14],
         })
-    return list(reversed(active))
+    active = list(reversed(active))
+    orders_cache[driver] = active
+    return active
 
 @app.put("/order/status", tags=["orders"])
 def update_order_status(
@@ -443,11 +457,18 @@ def update_order_status(
     if payload.new_status == "Returned":
         pass
 
+    # invalidate caches for this driver
+    orders_cache.pop(driver, None)
+    payouts_cache.pop(driver, None)
+
     return {"success": True}
 
 # ----------------------------  PAYOUTS  -------------------------------
 @app.get("/payouts", tags=["payouts"])
 def get_payouts(driver: str = Query(...)):
+    if driver in payouts_cache:
+        return payouts_cache[driver]
+
     ws_orders, ws_payouts = _tabs_for(driver)
     rows = ws_payouts.get_all_values()[1:]
     payouts = []
@@ -477,6 +498,7 @@ def get_payouts(driver: str = Query(...)):
             "orderDetails": order_details
         })
 
+    payouts_cache[driver] = payouts
     return payouts
 
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
@@ -489,6 +511,11 @@ def mark_payout_paid(payout_id: str, driver: str = Query(...)):
     row = cells[0].row
     ws_payouts.update_cell(row, 7, "paid")
     ws_payouts.update_cell(row, 8, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    # invalidate caches for this driver
+    payouts_cache.pop(driver, None)
+    orders_cache.pop(driver, None)
+
     return {"success": True}
 
 
