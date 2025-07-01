@@ -68,7 +68,7 @@ DELIVERY_STATUSES   = [
     "Pas de réponse 1", "Pas de réponse 2", "Pas de réponse 3",
     "Annulé", "Refusé", "Rescheduled", "Returned"
 ]
-COMPLETED_STATUSES  = ["Livré", "Annulé", "Refusé"]
+COMPLETED_STATUSES  = ["Livré", "Annulé", "Refusé", "Returned"]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
@@ -448,18 +448,36 @@ def update_order_status(
 # ----------------------------  PAYOUTS  -------------------------------
 @app.get("/payouts", tags=["payouts"])
 def get_payouts(driver: str = Query(...)):
-    _, ws_payouts = _tabs_for(driver)
+    ws_orders, ws_payouts = _tabs_for(driver)
     rows = ws_payouts.get_all_values()[1:]
-    return [{
-        "payoutId":   r[0],
-        "dateCreated":r[1],
-        "orders":     r[2],
-        "totalCash":  float(r[3] or 0),
-        "totalFees":  float(r[4] or 0),
-        "totalPayout":float(r[5] or 0),
-        "status":     r[6] or "pending",
-        "datePaid":   r[7],
-    } for r in reversed(rows)]
+    payouts = []
+    for r in reversed(rows):
+        orders_list = [o.strip() for o in (r[2] or "").split(',') if o.strip()]
+        order_details = []
+        for name in orders_list:
+            row = get_order_row(ws_orders, name)
+            if row:
+                order_details.append({
+                    "name": name,
+                    "cashAmount": float(row[12] or 0),
+                    "driverFee": float(row[13] or 0)
+                })
+            else:
+                order_details.append({"name": name, "cashAmount": 0.0, "driverFee": 0.0})
+
+        payouts.append({
+            "payoutId":   r[0],
+            "dateCreated":r[1],
+            "orders":     r[2],
+            "totalCash":  float(r[3] or 0),
+            "totalFees":  float(r[4] or 0),
+            "totalPayout":float(r[5] or 0),
+            "status":     r[6] or "pending",
+            "datePaid":   r[7],
+            "orderDetails": order_details
+        })
+
+    return payouts
 
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 def mark_payout_paid(payout_id: str, driver: str = Query(...)):
