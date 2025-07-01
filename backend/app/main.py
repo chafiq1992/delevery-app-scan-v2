@@ -585,25 +585,45 @@ def mark_payout_paid(payout_id: str, driver: str = Query(...)):
 
 
 # ----------------------------  STATS  -------------------------------
-def _compute_stats(driver: str, days: int) -> dict:
+def _compute_stats(
+    driver: str,
+    days: int | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict:
     ws_orders, _ = _tabs_for(driver)
     rows = ws_orders.get_all_values()[1:]
-    if days > 0:
-        start = dt.datetime.now().date() - dt.timedelta(days=days - 1)
+
+    if start:
+        try:
+            start_date = dt.datetime.strptime(start, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start date")
+    elif days and days > 0:
+        start_date = dt.datetime.now().date() - dt.timedelta(days=days - 1)
     else:
-        start = None
+        start_date = None
+
+    if end:
+        try:
+            end_date = dt.datetime.strptime(end, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end date")
+    else:
+        end_date = None
 
     total = delivered = returned = 0
     collect = fees = 0.0
     for r in rows:
         scan_day = r[12]
-        if start:
-            try:
-                sd = dt.datetime.strptime(scan_day, "%Y-%m-%d").date()
-                if sd < start:
-                    continue
-            except Exception:
-                pass
+        try:
+            sd = dt.datetime.strptime(scan_day, "%Y-%m-%d").date()
+        except Exception:
+            sd = None
+        if start_date and (not sd or sd < start_date):
+            continue
+        if end_date and (not sd or sd > end_date):
+            continue
         total += 1
         status = r[9]
         cash = safe_float(get_cell(r, 13))
@@ -627,13 +647,22 @@ def _compute_stats(driver: str, days: int) -> dict:
 
 
 @app.get("/stats", tags=["stats"])
-def get_stats(driver: str = Query(...), days: int = Query(15)):
-    return _compute_stats(driver, days)
+def get_stats(
+    driver: str = Query(...),
+    days: int | None = Query(None),
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+):
+    return _compute_stats(driver, days, start, end)
 
 
 @app.get("/admin/stats", tags=["admin"])
-def admin_stats(days: int = Query(15)):
-    return {d: _compute_stats(d, days) for d in DRIVERS.keys()}
+def admin_stats(
+    days: int | None = Query(None),
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+):
+    return {d: _compute_stats(d, days, start, end) for d in DRIVERS.keys()}
 
 
 @app.post("/archive-yesterday", tags=["maintenance"])
