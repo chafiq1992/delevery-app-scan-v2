@@ -276,7 +276,7 @@
       const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
       const fee = isExchange ? 10 : 20;
       const delivered = o.deliveryStatus === 'Livré';
-      const waMsg = encodeURIComponent(`Salam/Bonjour ${o.customerName || ''}, votre livreur ${driver_id} vous contacte. J’ai votre commande numéro ${o.orderId} d’un total de ${o.totalPrice} DH. Merci de m’envoyer votre localisation pour une livraison à votre adresse exacte.`);
+      const waMsg = encodeURIComponent(Salam/Bonjour ${o.customerName||''}, votre livreur ${driver_id} vous contacte.);
       const waUrl = `https://wa.me/${o.customerPhone}?text=${waMsg}`;
       h += `<div class="order-card ${delivered?'delivered':''}">
         <div class="order-header">
