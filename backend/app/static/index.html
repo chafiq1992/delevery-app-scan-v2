@@ -30,6 +30,8 @@
     .customer-phone{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem}
     .phone-btn{background:#25d366;color:white;border:none;padding:0.5rem;border-radius:50%;cursor:pointer;font-size:1rem;transition:all 0.3s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:35px;height:35px}
     .phone-btn:hover{background:#128c7e;transform:scale(1.1)}
+    .wa-btn{background:#25d366;color:white;border:none;padding:0.5rem;border-radius:50%;cursor:pointer;font-size:1rem;transition:all 0.3s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:35px;height:35px}
+    .wa-btn:hover{background:#128c7e;transform:scale(1.1)}
     .address{color:#666;font-size:0.95rem;line-height:1.4}
     .order-details{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0;padding:1rem;background:#f8faff;border-radius:8px}
     .detail-item{display:flex;flex-direction:column}
@@ -257,6 +259,15 @@
       const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
       const fee = isExchange ? 10 : 20;
       const delivered = o.deliveryStatus === 'Livré';
+      const waMsg = encodeURIComponent(
+        `Salam/Bonjour ${o.customerName||''}, votre livreur ${driver_id} vous contacte. ` +
+        `J'ai votre commande numéro ${o.orderName} d'un total de ${o.cashAmount||0} DH. ` +
+        `Merci de m'envoyer votre localisation pour pouvoir livrer à votre adresse exacte. ` +
+        `\nالسلام عليكم ${o.customerName||''}، معك الموزع ${driver_id}. ` +
+        `أتوفر على طلبك رقم ${o.orderName} بمبلغ إجمالي ${o.cashAmount||0} درهم. ` +
+        `المرجو إرسال موقعك لتسليم الطلب إلى عنوانك الصحيح.`
+      );
+      const waUrl = `https://wa.me/${o.customerPhone}?text=${waMsg}`;
       h += `<div class="order-card ${delivered?'delivered':''}">
         <div class="order-header">
           <div class="order-name">${o.orderName}</div>
@@ -264,7 +275,7 @@
         </div>
         <div class="customer-info">
           <div class="customer-name">${o.customerName||'N/A'}</div>
-          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn">📞</a></div>`:''}
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn">📞</a><a href="${waUrl}" class="wa-btn" target="_blank">💬</a></div>`:''}
           <div class="address">📍 ${o.address||'No address provided'}</div>
           ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
         </div>
