@@ -356,7 +356,7 @@ def scan(
             else "❌ Unfulfilled" if fulfillment != "fulfilled"
             else "✅ OK"
         )
-        cash_amount = float(chosen_order.get("total_price") or 0)
+        cash_amount = float(chosen_order.get("total_outstanding") or chosen_order.get("total_price") or 0)
         if chosen_order.get("shipping_address"):
             sa = chosen_order["shipping_address"]
             customer_name = sa.get("name", "")
