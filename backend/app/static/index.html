@@ -170,6 +170,12 @@
         <option value="30">Last 30 days</option>
         <option value="0">Since start</option>
       </select>
+      <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:center;align-items:center;flex-wrap:wrap;">
+        <input type="date" id="startDate">
+        <span>to</span>
+        <input type="date" id="endDate">
+        <button class="scan-btn" style="padding:0.5rem 1rem;font-size:1rem;" onclick="loadStatsRange()">📅 Load Range</button>
+      </div>
     </div>
     <div id="statsContainer" class="payout-container">
       <div class="loading">Click to load stats</div>
@@ -575,6 +581,16 @@
       .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
   }
 
+  function loadStatsRange(){
+    const start = document.getElementById('startDate').value;
+    const end   = document.getElementById('endDate').value;
+    if(!start || !end){alert('Select start and end dates');return;}
+    document.getElementById('statsContainer').innerHTML='<div class="loading">Loading stats...</div>';
+    apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`)
+      .then(displayStats)
+      .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
+
   function displayStats(st){
     if(!st){return;}
     updateDeliveryRateDisplay(st.deliveryRate||0);
@@ -605,7 +621,8 @@
     updateScheduledTime,
     loadPayouts,
     markPayoutPaid,
-    loadStats
+    loadStats,
+    loadStatsRange
   });
 
   /* ─────────────────────────────────────────────────────────────
