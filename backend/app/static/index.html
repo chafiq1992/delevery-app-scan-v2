@@ -189,8 +189,8 @@
     document.querySelector(`[onclick="showTab('${t}')"]`).classList.add('active');
     document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
     document.getElementById(`${t}-tab`).classList.add('active');
-    if(t==='orders')  loadOrders();
-    if(t==='payouts') loadPayouts();
+    if(t==='orders' && !orders.length)  loadOrders();
+    if(t==='payouts' && !payouts.length) loadPayouts();
   }
 
   /* ─────────────────────────────────────────────────────────────

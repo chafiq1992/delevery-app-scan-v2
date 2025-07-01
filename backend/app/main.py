@@ -470,13 +470,17 @@ def get_payouts(driver: str = Query(...)):
         return payouts_cache[driver]
 
     ws_orders, ws_payouts = _tabs_for(driver)
+    # Fetch orders sheet once and build a lookup dictionary
+    orders_data = ws_orders.get_all_values()
+    order_lookup = {row[1]: row for row in orders_data[1:]}
+
     rows = ws_payouts.get_all_values()[1:]
     payouts = []
     for r in reversed(rows):
         orders_list = [o.strip() for o in (r[2] or "").split(',') if o.strip()]
         order_details = []
         for name in orders_list:
-            row = get_order_row(ws_orders, name)
+            row = order_lookup.get(name)
             if row:
                 order_details.append({
                     "name": name,
