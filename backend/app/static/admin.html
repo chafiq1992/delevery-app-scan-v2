@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Dashboard</title>
+  <style>
+    body{font-family:sans-serif;margin:0;padding:1rem;background:#f5f7fa;}
+    h1{text-align:center;margin-bottom:1rem;color:#004aad;}
+    table{width:100%;border-collapse:collapse;background:white;box-shadow:0 2px 10px rgba(0,0,0,0.1);}
+    th,td{padding:0.6rem 0.8rem;border-bottom:1px solid #ddd;text-align:center;}
+    th{background:#004aad;color:white;}
+  </style>
+</head>
+<body>
+  <h1>Admin Dashboard</h1>
+  <table id="statsTable">
+    <thead>
+      <tr>
+        <th>Driver</th>
+        <th>Total Orders</th>
+        <th>Delivered</th>
+        <th>Returned</th>
+        <th>Delivery Rate</th>
+        <th>Total Collect</th>
+        <th>Total Fees</th>
+      </tr>
+    </thead>
+    <tbody id="statsBody"></tbody>
+  </table>
+
+  <script>
+    fetch('/admin/stats')
+      .then(r=>r.json())
+      .then(data=>{
+        const body=document.getElementById('statsBody');
+        Object.entries(data).forEach(([driver,s])=>{
+          const tr=document.createElement('tr');
+          tr.innerHTML=`<td>${driver}</td>
+                         <td>${s.totalOrders}</td>
+                         <td>${s.delivered}</td>
+                         <td>${s.returned}</td>
+                         <td>${s.deliveryRate.toFixed(0)}%</td>
+                         <td>${s.totalCollect.toFixed(2)}</td>
+                         <td>${s.totalFees.toFixed(2)}</td>`;
+          body.appendChild(tr);
+        });
+      });
+  </script>
+</body>
+</html>
