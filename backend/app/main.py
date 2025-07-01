@@ -523,6 +523,49 @@ def mark_payout_paid(payout_id: str, driver: str = Query(...)):
     return {"success": True}
 
 
+# ----------------------------  STATS  -------------------------------
+@app.get("/stats", tags=["stats"])
+def get_stats(driver: str = Query(...), days: int = Query(15)):
+    ws_orders, _ = _tabs_for(driver)
+    rows = ws_orders.get_all_values()[1:]
+    if days > 0:
+        start = dt.datetime.now().date() - dt.timedelta(days=days-1)
+    else:
+        start = None
+
+    total = delivered = returned = 0
+    collect = fees = 0.0
+    for r in rows:
+        scan_day = r[11]
+        if start:
+            try:
+                sd = dt.datetime.strptime(scan_day, "%Y-%m-%d").date()
+                if sd < start:
+                    continue
+            except Exception:
+                pass
+        total += 1
+        status = r[9]
+        cash = float(r[12] or 0)
+        fee = float(r[13] or 0)
+        if status == "Livré":
+            delivered += 1
+            collect += cash
+            fees += fee
+        elif status in ("Returned", "Annulé", "Refusé"):
+            returned += 1
+
+    rate = (delivered/total*100) if total else 0
+    return {
+        "totalOrders": total,
+        "delivered": delivered,
+        "returned": returned,
+        "totalCollect": collect,
+        "totalFees": fees,
+        "deliveryRate": rate,
+    }
+
+
 @app.post("/archive-yesterday", tags=["maintenance"])
 def archive_yesterday():
     ws = _get_or_create_sheet(SHEET_NAME, ORDER_HEADER)
