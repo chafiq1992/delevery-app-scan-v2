@@ -61,6 +61,7 @@
     
     /* Payout Management Styles */
     .payout-container{display:grid;gap:1.5rem}
+    .order-summary{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1.5rem;border-radius:12px;box-shadow:0 4px 20px rgba(0,74,173,0.3);margin-bottom:1.5rem}
     .payout-summary{background:linear-gradient(135deg,#4caf50,#66bb6a);color:white;padding:2rem;border-radius:12px;box-shadow:0 4px 20px rgba(76,175,80,0.3);margin-bottom:2rem}
     .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
     .summary-item{text-align:center}
@@ -253,7 +254,23 @@
     const c = document.getElementById('ordersContainer');
     if(!orders.length){ c.innerHTML='<div class="no-orders">📭 No active orders found.</div>'; return; }
 
-    let h = '';
+    const counts = {'Pas de réponse 1':0,'Pas de réponse 2':0,'Pas de réponse 3':0,'Rescheduled':0};
+    orders.forEach(o=>{
+      if(counts.hasOwnProperty(o.deliveryStatus)) counts[o.deliveryStatus]++;
+    });
+
+    let h = `
+      <div class="order-summary">
+        <h2 style="text-align:center;margin-bottom:1rem;">📋 Orders Summary</h2>
+        <div class="summary-grid">
+          <div class="summary-item"><div class="summary-label">Active</div><div class="summary-value">${orders.length}</div></div>
+          <div class="summary-item"><div class="summary-label">Pas de réponse 1</div><div class="summary-value">${counts['Pas de réponse 1']}</div></div>
+          <div class="summary-item"><div class="summary-label">Pas de réponse 2</div><div class="summary-value">${counts['Pas de réponse 2']}</div></div>
+          <div class="summary-item"><div class="summary-label">Pas de réponse 3</div><div class="summary-value">${counts['Pas de réponse 3']}</div></div>
+          <div class="summary-item"><div class="summary-label">Rescheduled</div><div class="summary-value">${counts['Rescheduled']}</div></div>
+        </div>
+      </div>`;
+
     orders.forEach(o=>{
       const tc = getPrimaryTag(o.tags);
       const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
@@ -359,6 +376,7 @@
     payouts.forEach(p=>{
       const paid = p.status==='paid'||p.status==='Paid';
       const ordersArr = (p.orders||"").split(',').map(s=>s.trim()).filter(Boolean);
+      const details = Array.isArray(p.orderDetails)?p.orderDetails:ordersArr.map(o=>({name:o,cashAmount:0,driverFee:0}));
       h += `<div class="payout-card ${paid?'paid':''}">
         <div class="payout-header">
           <div class="payout-period">📅 ${p.dateCreated||'N/A'}</div>
@@ -372,7 +390,7 @@
         </div>
         <div class="payout-orders">
           <h4 style="margin-bottom:0.5rem;color:#666;">Orders in this payout:</h4>
-          ${ordersArr.length?ordersArr.map(o=>`<div class="payout-order-item"><span>${o}</span></div>`).join(''):
+          ${details.length?details.map(d=>`<div class="payout-order-item"><span>${d.name}</span><span>${formatMoney(d.cashAmount)} DH</span></div>`).join(''):
             '<div style="color:#999;font-style:italic;">No orders</div>'}
         </div>
         ${!paid?`<button class="mark-paid-btn" onclick="markPayoutPaid('${p.payoutId}')">💰 Mark as Paid</button>`:''}
