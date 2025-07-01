@@ -103,6 +103,7 @@ class StatusUpdate(BaseModel):
     new_status: Optional[str] = None   # one of DELIVERY_STATUSES
     note: Optional[str] = None
     cash_amount: Optional[float] = None
+    scheduled_time: Optional[str] = None
 
 
 class ManualAdd(BaseModel):
@@ -236,7 +237,7 @@ def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
 ORDER_HEADER = [
     "Timestamp", "Order Name", "Customer Name", "Customer Phone",
     "Address", "Tags", "Fulfillment", "Order Status",
-    "Store", "Delivery Status", "Notes", "Scan Date",
+    "Store", "Delivery Status", "Notes", "Scheduled Time", "Scan Date",
     "Cash Amount", "Driver Fee", "Payout ID"
 ]
 
@@ -306,7 +307,7 @@ def add_to_payout(ws_orders: gspread.Worksheet, payout_ws: gspread.Worksheet,
     order_cells = ws_orders.findall(order_name)
     if order_cells:
         row_idx = order_cells[0].row
-        ws_orders.update_cell(row_idx, 15, payout_id)
+        ws_orders.update_cell(row_idx, 16, payout_id)
 
     return payout_id
 
@@ -397,7 +398,7 @@ def scan(
 
     ws_orders.append_row([
         now_ts, order_number, customer_name, phone, address, tags, fulfillment,
-        order_status, chosen_store_name, "Dispatched", "", scan_day,
+        order_status, chosen_store_name, "Dispatched", "", "", scan_day,
         cash_amount, driver_fee, ""
     ])
 
@@ -433,12 +434,33 @@ def list_active_orders(driver: str = Query(...)):
             "tags":         r[5],
             "deliveryStatus": r[9] or "Dispatched",
             "notes":        r[10],
-            "scanDate":     r[11],
-            "cashAmount":   float(r[12] or 0),
-            "driverFee":    float(r[13] or 0),
-            "payoutId":     r[14],
+            "scheduledTime": r[11],
+            "scanDate":     r[12],
+            "cashAmount":   float(r[13] or 0),
+            "driverFee":    float(r[14] or 0),
+            "payoutId":     r[15],
         })
-    active = list(reversed(active))
+    def sort_key(o):
+        if o["scheduledTime"]:
+            try:
+                return dt.datetime.strptime(o["scheduledTime"], "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+        return dt.datetime.strptime(o["timestamp"], "%Y-%m-%d %H:%M:%S")
+
+    active.sort(key=sort_key)
+
+    now = dt.datetime.now()
+    for o in active:
+        if o["scheduledTime"]:
+            try:
+                st = dt.datetime.strptime(o["scheduledTime"], "%Y-%m-%d %H:%M:%S")
+                o["urgent"] = (st - now).total_seconds() <= 3600
+            except Exception:
+                o["urgent"] = False
+        else:
+            o["urgent"] = False
+
     orders_cache[driver] = active
     return active
 
@@ -463,13 +485,15 @@ def update_order_status(
         ws_orders.update_cell(row, 10, payload.new_status)
     if payload.note is not None:
         ws_orders.update_cell(row, 11, payload.note)
+    if payload.scheduled_time is not None:
+        ws_orders.update_cell(row, 12, payload.scheduled_time)
     if payload.cash_amount is not None:
-        ws_orders.update_cell(row, 13, payload.cash_amount)
+        ws_orders.update_cell(row, 14, payload.cash_amount)
 
     # add to payout if freshly delivered
     if payload.new_status == "Livré" and row_vals[9] != "Livré":
         driver_fee = calculate_driver_fee(row_vals[5])
-        cash_amt = payload.cash_amount or float(row_vals[12] or 0)
+        cash_amt = payload.cash_amount or float(row_vals[13] or 0)
         add_to_payout(ws_orders, ws_payouts,
                       payload.order_name, cash_amt, driver_fee)
 
@@ -504,8 +528,8 @@ def get_payouts(driver: str = Query(...)):
             if row:
                 order_details.append({
                     "name": name,
-                    "cashAmount": float(row[12] or 0),
-                    "driverFee": float(row[13] or 0)
+                    "cashAmount": float(row[13] or 0),
+                    "driverFee": float(row[14] or 0)
                 })
             else:
                 order_details.append({"name": name, "cashAmount": 0.0, "driverFee": 0.0})
@@ -555,7 +579,7 @@ def _compute_stats(driver: str, days: int) -> dict:
     total = delivered = returned = 0
     collect = fees = 0.0
     for r in rows:
-        scan_day = r[11]
+        scan_day = r[12]
         if start:
             try:
                 sd = dt.datetime.strptime(scan_day, "%Y-%m-%d").date()
@@ -565,8 +589,8 @@ def _compute_stats(driver: str, days: int) -> dict:
                 pass
         total += 1
         status = r[9]
-        cash = float(r[12] or 0)
-        fee = float(r[13] or 0)
+        cash = float(r[13] or 0)
+        fee = float(r[14] or 0)
         if status == "Livré":
             delivered += 1
             collect += cash
