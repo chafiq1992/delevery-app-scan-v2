@@ -29,6 +29,16 @@
     .order-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-left:4px solid #004aad;transition:all 0.3s ease}
     .order-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,0.15)}
     .order-card.delivered{border-left-color:#4caf50}
+    .status-overlay{position:absolute;top:0;left:0;right:0;bottom:0;
+      display:flex;align-items:center;justify-content:center;
+      font-size:3rem;color:white;background:rgba(0,0,0,0.6);
+      border-radius:12px;pointer-events:none;animation:fadeOut 1s forwards;
+    }
+    @keyframes fadeOut{0%{opacity:1;}100%{opacity:0;}}
+    .slide-right{animation:slideRight 0.5s forwards;}
+    .slide-left{animation:slideLeft 0.5s forwards;}
+    @keyframes slideRight{to{transform:translateX(100%);opacity:0;}}
+    @keyframes slideLeft{to{transform:translateX(-100%);opacity:0;}}
     .order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem}
     .order-name{font-size:1.3rem;font-weight:bold;color:#004aad}
     .scan-date{background:#e3f2fd;color:#1976d2;padding:0.3rem 0.8rem;border-radius:20px;font-size:0.9rem;font-weight:600}
@@ -404,8 +414,18 @@
            {order_name: orderName, new_status: newStatus})
       .then(()=>{
         const card = selectEl.closest('.order-card');
-        if(newStatus==='Livré'){ card.classList.add('delivered'); loadPayouts(); }
-        if(newStatus==='Returned'){ card.remove(); loadPayouts(); }
+        if(newStatus==='Livré'){
+          card.classList.add('delivered');
+          showStatusAnimation(card,'success',()=>{
+            slideAndRemove(card,'right',loadOrders);
+          });
+          loadPayouts();
+        } else if(['Annulé','Refusé','Returned'].includes(newStatus)){
+          showStatusAnimation(card,'fail',()=>{
+            slideAndRemove(card,'left',loadOrders);
+          });
+          loadPayouts();
+        }
       })
       .catch(e=>alert('Error updating status: '+e));
   }
@@ -428,6 +448,26 @@
            {order_name: orderName, scheduled_time: timeStr})
       .then(()=>loadOrders())
       .catch(e=>alert('Error updating schedule: '+e));
+  }
+
+  function showStatusAnimation(card,type,done){
+    const overlay=document.createElement('div');
+    overlay.className='status-overlay';
+    overlay.textContent=type==='success'?'✅':'👎';
+    card.style.position='relative';
+    card.appendChild(overlay);
+    setTimeout(()=>{
+      overlay.remove();
+      done && done();
+    },800);
+  }
+
+  function slideAndRemove(card,dir,done){
+    card.classList.add(dir==='right'?'slide-right':'slide-left');
+    setTimeout(()=>{
+      card.remove();
+      done && done();
+    },500);
   }
 
   function startCountdown(){
