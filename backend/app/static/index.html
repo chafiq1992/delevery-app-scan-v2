@@ -15,6 +15,7 @@
     .driver-info{margin-top:0.3rem;font-weight:600;display:flex;justify-content:center;gap:0.5rem;align-items:center}
     .driver-name{font-size:1.2rem;text-transform:uppercase}
     .current-time{font-size:1rem}
+    .delivery-rate{font-size:1rem;font-weight:bold}
     .nav-tabs{display:flex;background:white;border-bottom:2px solid #e1e8ed;position:sticky;top:0;z-index:100}
     .nav-tab{flex:1;padding:1rem;text-align:center;cursor:pointer;border:none;background:white;font-size:1rem;font-weight:600;color:#666;transition:all 0.3s ease}
     .nav-tab.active{color:#004aad;border-bottom:3px solid #004aad;background:#f8faff}
@@ -107,13 +108,15 @@
     <div class="driver-info">
       <span id="driverName" class="driver-name"></span>
       <span id="currentTime" class="current-time"></span>
+      <span id="deliveryRate" class="delivery-rate"></span>
     </div>
   </div>
-  
+
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showTab('scanner')">📷 Scanner</button>
     <button class="nav-tab" onclick="showTab('orders')">📋 Orders</button>
     <button class="nav-tab" onclick="showTab('payouts')">💰 Payouts</button>
+    <button class="nav-tab" onclick="showTab('stats')">📊 Stats</button>
   </div>
   
   <div id="scanner-tab" class="tab-content active">
@@ -141,6 +144,21 @@
     <div id="payoutsContainer" class="payout-container">
       <div class="loading">Click here to load payouts</div>
       <button class="scan-btn" onclick="loadPayouts()">💰 Load Payouts</button>
+    </div>
+  </div>
+
+  <div id="stats-tab" class="tab-content">
+    <div style="text-align:center;margin-bottom:1rem;">
+      <select id="statsRange" onchange="loadStats(this.value)">
+        <option value="7">Last 7 days</option>
+        <option value="15" selected>Last 15 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="0">Since start</option>
+      </select>
+    </div>
+    <div id="statsContainer" class="payout-container">
+      <div class="loading">Click to load stats</div>
+      <button class="scan-btn" onclick="loadStats()">📊 Load Stats</button>
     </div>
   </div>
 
@@ -187,6 +205,7 @@
       }
       updateTime();
       setInterval(updateTime, 60000);
+      loadStatsHeader();
 
     
   /* ─────────────────────────────────────────────────────────────
@@ -195,6 +214,19 @@
   let scanner, orders = [], payouts = [];
   const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
   const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
+
+  function updateDeliveryRateDisplay(rate){
+    const el = document.getElementById('deliveryRate');
+    if(!el) return;
+    el.textContent = rate.toFixed(0)+'%';
+    el.style.color = rate >= 80 ? '#4caf50' : rate >= 60 ? '#ffb300' : '#f44336';
+  }
+
+  function loadStatsHeader(){
+    apiGet(`/stats?driver=${driver_id}&days=15`).then(s=>{
+      if(s && typeof s.deliveryRate==='number') updateDeliveryRateDisplay(s.deliveryRate);
+    });
+  }
 
   /* ─────────────────────────────────────────────────────────────
      3.  Navigation tabs (unchanged UI, but auto-refreshes)
@@ -206,6 +238,7 @@
     document.getElementById(`${t}-tab`).classList.add('active');
     if(t==='orders' && !orders.length)  loadOrders();
     if(t==='payouts' && !payouts.length) loadPayouts();
+    if(t==='stats') loadStats();
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -442,6 +475,35 @@
       .catch(e => alert('Error marking payout: ' + e));
   }
 
+  /* ─────────────────────────────────────────────────────────────
+     9.  Stats
+     ────────────────────────────────────────────────────────────*/
+  function loadStats(range){
+    const days = range || document.getElementById('statsRange').value || 15;
+    document.getElementById('statsContainer').innerHTML='<div class="loading">Loading stats...</div>';
+    apiGet(`/stats?driver=${driver_id}&days=${days}`)
+      .then(displayStats)
+      .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
+
+  function displayStats(st){
+    if(!st){return;}
+    updateDeliveryRateDisplay(st.deliveryRate||0);
+    const h = `
+      <div class="payout-summary">
+        <h2 style="text-align:center;margin-bottom:1rem;">📊 Stats Summary</h2>
+        <div class="summary-grid">
+          <div class="summary-item"><div class="summary-label">Total Orders</div><div class="summary-value">${st.totalOrders}</div></div>
+          <div class="summary-item"><div class="summary-label">Delivered</div><div class="summary-value">${st.delivered}</div></div>
+          <div class="summary-item"><div class="summary-label">Returned/Cancelled/Refused</div><div class="summary-value">${st.returned}</div></div>
+          <div class="summary-item"><div class="summary-label">Collected</div><div class="summary-value">${formatMoney(st.totalCollect)} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Fees Earned</div><div class="summary-value">${formatMoney(st.totalFees)} DH</div></div>
+          <div class="summary-item"><div class="summary-label">Delivery Rate</div><div class="summary-value">${(st.deliveryRate||0).toFixed(1)}%</div></div>
+        </div>
+      </div>`;
+    document.getElementById('statsContainer').innerHTML = h;
+  }
+
   // Expose functions globally for inline handlers
   Object.assign(window, {
     showTab,
@@ -452,7 +514,8 @@
     updateOrderNotes,
     updateCashAmount,
     loadPayouts,
-    markPayoutPaid
+    markPayoutPaid,
+    loadStats
   });
 
   /* ─────────────────────────────────────────────────────────────
