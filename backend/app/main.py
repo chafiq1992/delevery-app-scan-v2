@@ -217,6 +217,19 @@ def get_primary_display_tag(tags: str) -> str:
     return ""
 
 
+def safe_float(val):
+    """Return a float or 0.0 for falsy/non-numeric values."""
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def get_cell(row, idx, default=""):
+    """Safely access a cell from a row, providing a default if missing."""
+    return row[idx] if idx < len(row) else default
+
+
 def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
     """Call Shopify Admin API by order name (#1234)."""
     auth = (store_cfg["api_key"], store_cfg["password"])
@@ -436,8 +449,8 @@ def list_active_orders(driver: str = Query(...)):
             "notes":        r[10],
             "scheduledTime": r[11],
             "scanDate":     r[12],
-            "cashAmount":   float(r[13] or 0),
-            "driverFee":    float(r[14] or 0),
+            "cashAmount":   safe_float(get_cell(r, 13)),
+            "driverFee":    safe_float(get_cell(r, 14)),
             "payoutId":     r[15],
         })
     def sort_key(o):
@@ -493,7 +506,7 @@ def update_order_status(
     # add to payout if freshly delivered
     if payload.new_status == "Livré" and row_vals[9] != "Livré":
         driver_fee = calculate_driver_fee(row_vals[5])
-        cash_amt = payload.cash_amount or float(row_vals[13] or 0)
+        cash_amt = payload.cash_amount or safe_float(get_cell(row_vals, 13))
         add_to_payout(ws_orders, ws_payouts,
                       payload.order_name, cash_amt, driver_fee)
 
@@ -528,8 +541,8 @@ def get_payouts(driver: str = Query(...)):
             if row:
                 order_details.append({
                     "name": name,
-                    "cashAmount": float(row[13] or 0),
-                    "driverFee": float(row[14] or 0)
+                    "cashAmount": safe_float(get_cell(row, 13)),
+                    "driverFee": safe_float(get_cell(row, 14))
                 })
             else:
                 order_details.append({"name": name, "cashAmount": 0.0, "driverFee": 0.0})
@@ -589,8 +602,8 @@ def _compute_stats(driver: str, days: int) -> dict:
                 pass
         total += 1
         status = r[9]
-        cash = float(r[13] or 0)
-        fee = float(r[14] or 0)
+        cash = safe_float(get_cell(r, 13))
+        fee = safe_float(get_cell(r, 14))
         if status == "Livré":
             delivered += 1
             collect += cash
