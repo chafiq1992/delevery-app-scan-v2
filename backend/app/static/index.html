@@ -87,6 +87,11 @@
     .mark-paid-btn{background:#2196f3;color:white;border:none;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;font-weight:600;transition:all 0.3s ease}
     .mark-paid-btn:hover{background:#1976d2;transform:translateY(-1px)}
     .mark-paid-btn:disabled{background:#ccc;cursor:not-allowed;transform:none}
+
+    .schedule-section{margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem}
+    .schedule-input{padding:0.3rem;border:2px solid #ddd;border-radius:6px}
+    .urgent-icon{color:#f44336;font-size:1.2rem}
+    .order-card.urgent{border-left-color:#f44336}
     
     @media (max-width:768px){
       .tab-content{padding:1rem}
@@ -313,6 +318,12 @@
     const c = document.getElementById('ordersContainer');
     if(!orders.length){ c.innerHTML='<div class="no-orders">📭 No active orders found.</div>'; return; }
 
+    orders.sort((a,b)=>{
+      const at=a.scheduledTime?new Date(a.scheduledTime).getTime():Infinity;
+      const bt=b.scheduledTime?new Date(b.scheduledTime).getTime():Infinity;
+      return at-bt;
+    });
+
     const counts = {'Pas de réponse 1':0,'Pas de réponse 2':0,'Pas de réponse 3':0,'Rescheduled':0};
     orders.forEach(o=>{
       if(counts.hasOwnProperty(o.deliveryStatus)) counts[o.deliveryStatus]++;
@@ -371,12 +382,18 @@
             ${deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
           </select>
         </div>
+        <div class="schedule-section">
+          <input type="datetime-local" class="schedule-input" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${o.orderName}',this.value)">
+          ${o.urgent?'<span class="urgent-icon">🔔</span>':''}
+          ${o.scheduledTime?`<span class="countdown" data-time="${o.scheduledTime}"></span>`:''}
+        </div>
         <div class="notes-section">
           <textarea class="notes-input" placeholder="Add notes…" onchange="updateOrderNotes('${o.orderName}',this.value)">${o.notes||''}</textarea>
         </div>
       </div>`;
     });
     c.innerHTML = h;
+    startCountdown();
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -404,6 +421,38 @@
     apiPut(`/order/status?driver=${driver_id}`,
            {order_name: orderName, cash_amount: cash})
       .catch(e=>alert('Error updating cash amount: '+e));
+  }
+
+  function updateScheduledTime(orderName,timeStr){
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, scheduled_time: timeStr})
+      .then(()=>loadOrders())
+      .catch(e=>alert('Error updating schedule: '+e));
+  }
+
+  function startCountdown(){
+    document.querySelectorAll('.countdown').forEach(span=>{
+      const t = span.dataset.time;
+      if(!t) return;
+      function update(){
+        const diff = new Date(t) - new Date();
+        if(diff <= 0){
+          span.textContent = '0h 0m';
+          span.closest('.order-card')?.classList.add('urgent');
+          return;
+        }
+        const h = Math.floor(diff/3600000);
+        const m = Math.floor((diff%3600000)/60000);
+        span.textContent = `${h}h ${m}m`;
+        if(diff <= 3600000){
+          span.closest('.order-card')?.classList.add('urgent');
+        } else {
+          span.closest('.order-card')?.classList.remove('urgent');
+        }
+      }
+      update();
+      setInterval(update,60000);
+    });
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -513,6 +562,7 @@
     updateOrderStatus,
     updateOrderNotes,
     updateCashAmount,
+    updateScheduledTime,
     loadPayouts,
     markPayoutPaid,
     loadStats
