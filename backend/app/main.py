@@ -64,6 +64,10 @@ SHOPIFY_STORES = [
     },
 ]
 
+# Sheet configuration (default names can be overridden via env vars)
+SHEET_NAME = os.getenv("SHEET_NAME")
+DELIVERY_GUY_NAME = os.getenv("DELIVERY_GUY_NAME", "delivery")
+
 DELIVERY_STATUSES   = [
     "Dispatched", "Livré", "En cours",
     "Pas de réponse 1", "Pas de réponse 2", "Pas de réponse 3",
