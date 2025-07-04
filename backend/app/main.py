@@ -765,6 +765,34 @@ def admin_trends(
     ]
 
 
+@app.get("/admin/search", tags=["admin"])
+def admin_search(q: str = Query(...)):
+    """Search orders across all drivers by order name or phone."""
+    q_lower = q.lower()
+    results: list[dict] = []
+    for driver in DRIVERS.keys():
+        data = orders_data_cache.get(driver)
+        if data is None:
+            ws_orders, _ = _tabs_for(driver)
+            data = ws_orders.get_all_values()
+            orders_data_cache[driver] = data
+        rows = data[1:]
+        for r in rows:
+            order_name = get_cell(r, 1)
+            phone = get_cell(r, 3)
+            if q_lower in str(order_name).lower() or q_lower in str(phone).lower():
+                results.append({
+                    "driver": driver,
+                    "orderName": order_name,
+                    "customerName": get_cell(r, 2),
+                    "customerPhone": phone,
+                    "deliveryStatus": get_cell(r, 9) or "Dispatched",
+                    "cashAmount": safe_float(get_cell(r, 13)),
+                    "address": get_cell(r, 4),
+                })
+    return results
+
+
 @app.post("/archive-yesterday", tags=["maintenance"])
 def archive_yesterday():
     ws = _get_or_create_sheet(SHEET_NAME, ORDER_HEADER)
