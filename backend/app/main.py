@@ -171,8 +171,9 @@ DRIVERS = {
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 # In-memory caches for orders and payouts
-orders_cache = TTLCache(maxsize=8, ttl=30)
-payouts_cache = TTLCache(maxsize=8, ttl=30)
+orders_cache = TTLCache(maxsize=8, ttl=300)    # five minutes
+payouts_cache = TTLCache(maxsize=8, ttl=300)
+orders_data_cache = TTLCache(maxsize=8, ttl=120)
 
 @app.get("/", response_class=HTMLResponse)
 async def show_login():
@@ -439,6 +440,7 @@ def scan(
     # invalidate caches for this driver
     orders_cache.pop(driver, None)
     payouts_cache.pop(driver, None)
+    orders_data_cache.pop(driver, None)
 
     return ScanResult(
         result=result_msg,
@@ -453,8 +455,12 @@ def list_active_orders(driver: str = Query(...)):
     if driver in orders_cache:
         return orders_cache[driver]
 
-    ws_orders, _ = _tabs_for(driver)
-    data = ws_orders.get_all_values()[1:]  # skip header
+    data = orders_data_cache.get(driver)
+    if data is None:
+        ws_orders, _ = _tabs_for(driver)
+        data = ws_orders.get_all_values()
+        orders_data_cache[driver] = data
+    data = data[1:]  # skip header
     active = []
     for r in data:
         if not r or r[9] in COMPLETED_STATUSES:
@@ -547,6 +553,7 @@ def update_order_status(
     # invalidate caches for this driver
     orders_cache.pop(driver, None)
     payouts_cache.pop(driver, None)
+    orders_data_cache.pop(driver, None)
 
     return {"success": True}
 
@@ -558,7 +565,10 @@ def get_payouts(driver: str = Query(...)):
 
     ws_orders, ws_payouts = _tabs_for(driver)
     # Fetch orders sheet once and build a lookup dictionary
-    orders_data = ws_orders.get_all_values()
+    orders_data = orders_data_cache.get(driver)
+    if orders_data is None:
+        orders_data = ws_orders.get_all_values()
+        orders_data_cache[driver] = orders_data
     order_lookup = {row[1]: row for row in orders_data[1:]}
 
     rows = ws_payouts.get_all_values()[1:]
@@ -606,6 +616,7 @@ def mark_payout_paid(payout_id: str, driver: str = Query(...)):
     # invalidate caches for this driver
     payouts_cache.pop(driver, None)
     orders_cache.pop(driver, None)
+    orders_data_cache.pop(driver, None)
 
     return {"success": True}
 
@@ -617,8 +628,12 @@ def _compute_stats(
     start: str | None = None,
     end: str | None = None,
 ) -> dict:
-    ws_orders, _ = _tabs_for(driver)
-    rows = ws_orders.get_all_values()[1:]
+    data = orders_data_cache.get(driver)
+    if data is None:
+        ws_orders, _ = _tabs_for(driver)
+        data = ws_orders.get_all_values()
+        orders_data_cache[driver] = data
+    rows = data[1:]
 
     if start:
         try:
@@ -723,8 +738,12 @@ def admin_trends(
 
     counts: dict[dt.date, int] = {}
     for driver in DRIVERS.keys():
-        ws_orders, _ = _tabs_for(driver)
-        rows = ws_orders.get_all_values()[1:]
+        data = orders_data_cache.get(driver)
+        if data is None:
+            ws_orders, _ = _tabs_for(driver)
+            data = ws_orders.get_all_values()
+            orders_data_cache[driver] = data
+        rows = data[1:]
         for r in rows:
             scan_day = get_cell(r, 12)
             status = get_cell(r, 9)
