@@ -9,6 +9,10 @@
     body{font-family:sans-serif;background:#f5f7fa;}
     .logo-icon{width:120px;height:auto;margin:0 auto;display:block}
     .main-header{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1rem;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
+    /* make stats table horizontally scrollable on small screens */
+    #statsTable{min-width:850px}
+    #statsTable th,#statsTable td{padding:0.5rem;white-space:nowrap}
+    @media(max-width:640px){#statsTable{font-size:0.75rem}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -61,7 +65,7 @@
   </div>
 
   <div class="overflow-x-auto">
-  <table id="statsTable" class="min-w-full">
+  <table id="statsTable" class="min-w-max text-sm">
     <thead>
       <tr>
         <th>Driver</th>
@@ -248,7 +252,7 @@
     }
 
     document.getElementById('searchInput').addEventListener('keypress',e=>{if(e.key==='Enter')performSearch();});
-    applyDefaultRange();
+    document.addEventListener('DOMContentLoaded',applyDefaultRange);
   </script>
 </body>
 </html>
