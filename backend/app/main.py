@@ -683,6 +683,59 @@ def admin_stats(
     return {d: _compute_stats(d, days, start, end) for d in DRIVERS.keys()}
 
 
+# -------------------------------------------------------------------
+# Daily trend data for all drivers
+# -------------------------------------------------------------------
+@app.get("/admin/trends", tags=["admin"])
+def admin_trends(
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+    days: int | None = Query(None),
+):
+    """Return delivered count per day across all drivers."""
+    if start:
+        try:
+            start_date = dt.datetime.strptime(start, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start date")
+    elif days and days > 0:
+        start_date = dt.datetime.now().date() - dt.timedelta(days=days - 1)
+    else:
+        start_date = None
+
+    if end:
+        try:
+            end_date = dt.datetime.strptime(end, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end date")
+    else:
+        end_date = dt.datetime.now().date()
+
+    counts: dict[dt.date, int] = {}
+    for driver in DRIVERS.keys():
+        ws_orders, _ = _tabs_for(driver)
+        rows = ws_orders.get_all_values()[1:]
+        for r in rows:
+            scan_day = get_cell(r, 12)
+            status = get_cell(r, 9)
+            try:
+                sd = dt.datetime.strptime(scan_day, "%Y-%m-%d").date()
+            except Exception:
+                continue
+            if start_date and sd < start_date:
+                continue
+            if end_date and sd > end_date:
+                continue
+            if status == "Livré":
+                counts[sd] = counts.get(sd, 0) + 1
+
+    days_sorted = sorted(counts.keys())
+    return [
+        {"date": d.strftime("%Y-%m-%d"), "delivered": counts[d]}
+        for d in days_sorted
+    ]
+
+
 @app.post("/archive-yesterday", tags=["maintenance"])
 def archive_yesterday():
     ws = _get_or_create_sheet(SHEET_NAME, ORDER_HEADER)
