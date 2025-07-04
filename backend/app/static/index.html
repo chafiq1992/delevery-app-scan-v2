@@ -50,6 +50,7 @@
     .wa-btn{background:#25d366;color:white;border:none;padding:0.5rem;border-radius:50%;cursor:pointer;font-size:1rem;transition:all 0.3s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:35px;height:35px}
     .wa-btn:hover{background:#128c7e;transform:scale(1.1)}
     .address{color:#666;font-size:0.95rem;line-height:1.4}
+    .comm-log{font-size:0.85rem;color:#555;margin-top:0.3rem;white-space:pre-line}
     .order-details{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0;padding:1rem;background:#f8faff;border-radius:8px}
     .detail-item{display:flex;flex-direction:column}
     .detail-label{font-size:0.9rem;color:#666;margin-bottom:0.2rem}
@@ -64,6 +65,7 @@
     .notes-section{margin-top:1rem}
     .notes-input{width:100%;padding:0.8rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;resize:vertical;min-height:80px;transition:border-color 0.3s ease}
     .notes-input:focus{outline:none;border-color:#004aad}
+    .status-log{font-size:0.85rem;color:#444;margin-top:0.5rem;white-space:pre-line}
     .loading,.no-orders{text-align:center;padding:2rem;color:#666;font-size:1.1rem}
     .no-orders{color:#999;font-size:1.2rem;padding:3rem}
     .error-message{text-align:center;padding:2rem;color:#d32f2f;font-size:1.1rem;background:#ffebee;border-radius:8px;margin:1rem 0}
@@ -378,9 +380,10 @@
         </div>
         <div class="customer-info">
           <div class="customer-name">${o.customerName||'N/A'}</div>
-          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn">📞</a><a href="${waUrl}" class="wa-btn" target="_blank">💬</a></div>`:''}
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><button class="phone-btn" onclick="recordCall('${o.orderName}','${o.customerPhone}')">📞</button><button class="wa-btn" onclick="recordWhatsapp('${o.orderName}','${waUrl}')">💬</button></div>`:''}
           <div class="address">📍 ${o.address||'No address provided'}</div>
           ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
+          <div id="comm-${o.orderName}" class="comm-log"></div>
         </div>
         <div class="order-details">
           <div class="detail-item">
@@ -405,10 +408,12 @@
         </div>
         <div class="notes-section">
           <textarea class="notes-input" placeholder="Add notes…" onchange="updateOrderNotes('${o.orderName}',this.value)">${o.notes||''}</textarea>
+          ${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}
         </div>
       </div>`;
     });
     c.innerHTML = h;
+    orders.forEach(o=>displayCommunicationLog(o.orderName));
     startCountdown();
   }
 
@@ -499,6 +504,38 @@
       update();
       setInterval(update,60000);
     });
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     Communication logging
+     ────────────────────────────────────────────────────────────*/
+  function getCommLog(order){
+    try{ return JSON.parse(localStorage.getItem('log_'+order)||'{}'); }catch(e){return {};}
+  }
+  function saveCommLog(order,log){
+    localStorage.setItem('log_'+order,JSON.stringify(log));
+  }
+  function recordCall(order,phone){
+    const log=getCommLog(order);log.calls=log.calls||[];
+    log.calls.push(new Date().toLocaleString());
+    saveCommLog(order,log);
+    displayCommunicationLog(order);
+    window.location.href='tel:'+phone;
+  }
+  function recordWhatsapp(order,url){
+    const log=getCommLog(order);log.whats=log.whats||[];
+    log.whats.push(new Date().toLocaleString());
+    saveCommLog(order,log);
+    displayCommunicationLog(order);
+    window.open(url,'_blank');
+  }
+  function displayCommunicationLog(order){
+    const log=getCommLog(order);
+    const el=document.getElementById('comm-'+order);
+    if(!el) return;
+    const calls=(log.calls||[]).map(t=>'\u260E\ufe0f '+t).join('\n');
+    const whats=(log.whats||[]).map(t=>'\ud83d\udc8c '+t).join('\n');
+    el.textContent=[calls,whats].filter(Boolean).join('\n');
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -622,7 +659,9 @@
     loadPayouts,
     markPayoutPaid,
     loadStats,
-    loadStatsRange
+    loadStatsRange,
+    recordCall,
+    recordWhatsapp
   });
 
   /* ─────────────────────────────────────────────────────────────

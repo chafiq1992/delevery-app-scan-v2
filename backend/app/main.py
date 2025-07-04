@@ -81,7 +81,14 @@ EXCHANGE_DELIVERY_FEE = 10
 
 def _get_or_create_sheet(sheet_name: str, header: List[str]) -> gspread.Worksheet:
     try:
-        return ss.worksheet(sheet_name)
+        ws = ss.worksheet(sheet_name)
+        existing_header = ws.row_values(1)
+        if existing_header != header:
+            # extend or update header to match expected columns
+            for idx, val in enumerate(header, start=1):
+                if idx > len(existing_header) or existing_header[idx-1] != val:
+                    ws.update_cell(1, idx, val)
+        return ws
     except gspread.WorksheetNotFound:
         ws = ss.add_worksheet(title=sheet_name, rows="1", cols=str(len(header)))
         ws.append_row(header)
@@ -255,7 +262,7 @@ ORDER_HEADER = [
     "Timestamp", "Order Name", "Customer Name", "Customer Phone",
     "Address", "Tags", "Fulfillment", "Order Status",
     "Store", "Delivery Status", "Notes", "Scheduled Time", "Scan Date",
-    "Cash Amount", "Driver Fee", "Payout ID"
+    "Cash Amount", "Driver Fee", "Payout ID", "Status Log"
 ]
 
 PAYOUT_HEADER = [
@@ -456,6 +463,7 @@ def list_active_orders(driver: str = Query(...)):
             "cashAmount":   safe_float(get_cell(r, 13)),
             "driverFee":    safe_float(get_cell(r, 14)),
             "payoutId":     r[15],
+            "statusLog":    get_cell(r, 16),
         })
     def sort_key(o):
         if o["scheduledTime"]:
@@ -498,8 +506,16 @@ def update_order_status(
     row = cells[0].row
     row_vals = ws_orders.row_values(row)
 
+    # ensure row has at least 17 columns
+    if len(row_vals) < len(ORDER_HEADER):
+        row_vals += [""] * (len(ORDER_HEADER) - len(row_vals))
+
     if payload.new_status:
         ws_orders.update_cell(row, 10, payload.new_status)
+        ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        status_cell = ws_orders.cell(row, 17)
+        status_cell.value = ((status_cell.value or "") + f" | {payload.new_status} @ {ts}").strip(" |")
+        ws_orders.update_cells([status_cell])
     if payload.note is not None:
         ws_orders.update_cell(row, 11, payload.note)
     if payload.scheduled_time is not None:
