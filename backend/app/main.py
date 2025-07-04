@@ -77,22 +77,32 @@ COMPLETED_STATUSES  = ["Livré", "Annulé", "Refusé", "Returned"]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
+# Cache for opened worksheets to avoid repeated API calls
+sheet_cache = TTLCache(maxsize=32, ttl=300)
+
 
 
 def _get_or_create_sheet(sheet_name: str, header: List[str]) -> gspread.Worksheet:
-    try:
-        ws = ss.worksheet(sheet_name)
-        existing_header = ws.row_values(1)
-        if existing_header != header:
-            # extend or update header to match expected columns
-            for idx, val in enumerate(header, start=1):
-                if idx > len(existing_header) or existing_header[idx-1] != val:
-                    ws.update_cell(1, idx, val)
-        return ws
-    except gspread.WorksheetNotFound:
-        ws = ss.add_worksheet(title=sheet_name, rows="1", cols=str(len(header)))
-        ws.append_row(header)
-        return ws
+    # return cached worksheet if available
+    ws = sheet_cache.get(sheet_name)
+    if ws is None:
+        try:
+            ws = ss.worksheet(sheet_name)
+        except gspread.WorksheetNotFound:
+            ws = ss.add_worksheet(title=sheet_name, rows="1", cols=str(len(header)))
+            ws.append_row(header)
+        sheet_cache[sheet_name] = ws
+
+    existing_header = ws.row_values(1)
+    if existing_header != header:
+        # extend or update header to match expected columns
+        for idx, val in enumerate(header, start=1):
+            if idx > len(existing_header) or existing_header[idx-1] != val:
+                ws.update_cell(1, idx, val)
+        # refresh cache entry after header update
+        sheet_cache[sheet_name] = ws
+
+    return ws
 
 
 # ───────────────────────────────────────────────────────────────
