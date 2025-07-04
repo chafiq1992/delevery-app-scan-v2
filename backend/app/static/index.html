@@ -422,7 +422,7 @@
         </div>
         <div class="customer-info">
           <div class="customer-name">${o.customerName||'N/A'}</div>
-          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}" class="wa-btn" target="_blank" onclick="recordWhatsapp('${o.orderName}', '${waUrl}')">💬</a></div>`:''}
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}" class="wa-btn" target="_blank" onclick="return recordWhatsapp('${o.orderName}', '${waUrl}')">💬</a></div>`:''}
           <div class="address">📍 ${o.address||'No address provided'}</div>
           ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
           <div id="comm-${o.orderName}" class="comm-log"></div>
