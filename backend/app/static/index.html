@@ -422,9 +422,10 @@
         </div>
         <div class="customer-info">
           <div class="customer-name">${o.customerName||'N/A'}</div>
-          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="javascript:void(0)"
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}"
+        target="_blank"
         class="wa-btn"
-        onclick="return openWhatsapp('${o.orderName}', '${waUrl}')">💬</a></div>`:''}
+        onclick="return recordWhatsapp('${o.orderName}')">💬</a></div>`:''}
           <div class="address">📍 ${o.address||'No address provided'}</div>
           ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
           <div id="comm-${o.orderName}" class="comm-log"></div>
@@ -566,17 +567,13 @@
     displayCommunicationLog(order);
     return true;
   }
-  function recordWhatsapp(order,href){
-    const log=getCommLog(order);log.whats=log.whats||[];
+  function recordWhatsapp(order){
+    const log = getCommLog(order);
+    log.whats  = log.whats || [];
     log.whats.push(new Date().toLocaleString());
-    saveCommLog(order,log);
+    saveCommLog(order, log);
     displayCommunicationLog(order);
-    return true;
-  }
-  function openWhatsapp(order,href){
-    recordWhatsapp(order,href);
-    window.open(href,'_blank');
-    return false;
+    return true;          // let the <a> continue to WhatsApp
   }
   function displayCommunicationLog(order){
     const log=getCommLog(order);
@@ -712,8 +709,7 @@
     applyDefaultRange,
     selectQuickRange,
     recordCall,
-    recordWhatsapp,
-    openWhatsapp
+    recordWhatsapp
   });
 
   /* ─────────────────────────────────────────────────────────────
