@@ -575,7 +575,7 @@
     const log=getCommLog(order);
     const el=document.getElementById('comm-'+order);
     if(!el) return;
-    const calls=(log.calls||[]).map(t=>'\u260E\ufe0f '+t).join('\n');
+    const calls=(log.calls||[]).map(t=>'\ud83d\udcde '+t).join('\n');
     const whats=(log.whats||[]).map(t=>'\ud83d\udc8c '+t).join('\n');
     el.textContent=[calls,whats].filter(Boolean).join('\n');
   }
