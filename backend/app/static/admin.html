@@ -7,26 +7,34 @@
   <style>
     body{font-family:sans-serif;margin:0;padding:1rem;background:#f5f7fa;}
     h1{text-align:center;margin-bottom:1rem;color:#004aad;}
-    .controls{display:flex;justify-content:center;margin-bottom:1rem;gap:0.5rem;flex-wrap:wrap}
-    select{padding:0.5rem;font-size:1rem;border-radius:6px}
     table{width:100%;border-collapse:collapse;background:white;box-shadow:0 2px 10px rgba(0,0,0,0.1);}
     th,td{padding:0.6rem 0.8rem;border-bottom:1px solid #ddd;text-align:center;}
     th{background:#004aad;color:white;}
+    .range-picker{display:flex;justify-content:center;gap:1rem;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap}
+    .quick-ranges{display:flex;flex-direction:column;gap:0.5rem;max-height:180px;overflow-y:auto;padding-right:0.5rem}
+    .quick-ranges button{padding:0.5rem 1rem;border:none;background:#f0f0f0;border-radius:6px;cursor:pointer}
+    .quick-ranges button:hover{background:#e0e0e0}
+    .custom-range{display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center}
     @media(max-width:600px){table,th,td{font-size:0.9rem}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <h1>Admin Dashboard</h1>
-  <div class="controls">
-    <label>Range:
-      <select id="rangeSel" onchange="loadAll()">
-        <option value="7">7d</option>
-        <option value="15" selected>15d</option>
-        <option value="30">30d</option>
-        <option value="0">All</option>
-      </select>
-    </label>
+  <div class="range-picker">
+    <div class="quick-ranges">
+      <button onclick="selectQuickRange(7)">Last 7 days</button>
+      <button onclick="selectQuickRange(15)">Last 15 days</button>
+      <button onclick="selectQuickRange(30)">Last 30 days</button>
+      <button onclick="selectQuickRange(90)">Last 90 days</button>
+      <button onclick="selectQuickRange(0)">Since start</button>
+    </div>
+    <div class="custom-range">
+      <input type="date" id="startDate">
+      <span>to</span>
+      <input type="date" id="endDate">
+      <button class="scan-btn" style="padding:0.5rem 1rem;font-size:1rem;" onclick="loadAll()">Apply</button>
+    </div>
   </div>
 
   <table id="statsTable">
@@ -39,6 +47,7 @@
         <th>Delivery Rate</th>
         <th>Total Collect</th>
         <th>Total Fees</th>
+        <th>Canceled DH</th>
         <th>Active Orders</th>
         <th>Unpaid Payout</th>
       </tr>
@@ -47,11 +56,30 @@
   </table>
 
   <canvas id="statsChart" style="max-width:600px;margin:2rem auto;display:block;"></canvas>
+  <canvas id="summaryChart" style="max-width:600px;margin:2rem auto;display:block;"></canvas>
 
   <script>
+    function formatDate(d){
+      return d.toISOString().split('T')[0];
+    }
+
+    function computeDefaultDates(){
+      const now=new Date();
+      const end=new Date(now.getTime()-3*86400000);
+      const start=new Date(end.getTime()-29*86400000);
+      return{start:formatDate(start),end:formatDate(end)};
+    }
+
     async function loadAll(){
-      const range=document.getElementById('rangeSel').value||15;
-      const stats=await fetch(`/admin/stats?days=${range}`).then(r=>r.json());
+      const start=document.getElementById('startDate').value;
+      const end=document.getElementById('endDate').value;
+      let url='/admin/stats';
+      if(start&&end){
+        url+=`?start=${start}&end=${end}`;
+      }else{
+        url+='?days=30';
+      }
+      const stats=await fetch(url).then(r=>r.json());
       const drivers=await fetch('/drivers').then(r=>r.json());
 
       const tbody=document.getElementById('statsBody');
@@ -66,13 +94,14 @@
                            .reduce((sum,p)=>sum+(parseFloat(p.totalPayout)||0),0);
 
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${d}</td>
+        tr.innerHTML=`<td><a href="/static/index.html?driver=${d}" target="_blank">${d}</a></td>
                       <td>${s.totalOrders||0}</td>
                       <td>${s.delivered||0}</td>
                       <td>${s.returned||0}</td>
                       <td>${(s.deliveryRate||0).toFixed(0)}%</td>
                       <td>${(s.totalCollect||0).toFixed(2)}</td>
                       <td>${(s.totalFees||0).toFixed(2)}</td>
+                      <td>${(s.canceledAmount||0).toFixed(2)}</td>
                       <td>${orders.length}</td>
                       <td>${unpaid.toFixed(2)}</td>`;
         tbody.appendChild(tr);
@@ -82,15 +111,71 @@
       }
 
       renderChart(chartLabels,chartData);
+      loadSummary();
     }
 
-    function renderChart(labels,data){
+function renderChart(labels,data){
       const ctx=document.getElementById('statsChart');
       if(window.statsChart) window.statsChart.destroy();
       window.statsChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Delivered',data,backgroundColor:'#4caf50'}]},options:{responsive:true,maintainAspectRatio:false}});
+}
+
+    async function loadSummary(){
+      const data=await fetch('/admin/stats?days=30').then(r=>r.json());
+      let sum={delivered:0,canceled:0,collected:0,canceledAmt:0,total:0};
+      for(const k in data){
+        const s=data[k]||{};
+        sum.delivered+=s.delivered||0;
+        sum.canceled+=s.returned||0;
+        sum.collected+=s.totalCollect||0;
+        sum.canceledAmt+=s.canceledAmount||0;
+        sum.total+=s.totalOrders||0;
+      }
+      renderSummary(sum);
     }
 
-    loadAll();
+    function renderSummary(sum){
+      const ctx=document.getElementById('summaryChart');
+      if(window.summaryChart) window.summaryChart.destroy();
+      const labels=['Delivered','Collected DH','Canceled','Canceled DH'];
+      const data=[
+        sum.delivered,
+        Number(sum.collected.toFixed(2)),
+        sum.canceled,
+        Number(sum.canceledAmt.toFixed(2))
+      ];
+      window.summaryChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{label:'Totals (30d)',data,backgroundColor:'#2196f3'}]},options:{responsive:true,maintainAspectRatio:false}});
+      const rate=sum.total?((sum.delivered/sum.total)*100).toFixed(1):'0';
+      if(window.summaryRateEl) window.summaryRateEl.remove();
+      window.summaryRateEl=document.createElement('div');
+      window.summaryRateEl.style.textAlign='center';
+      window.summaryRateEl.style.fontWeight='bold';
+      window.summaryRateEl.textContent=`Delivery Rate: ${rate}%`;
+      ctx.parentNode.insertBefore(window.summaryRateEl,ctx.nextSibling);
+    }
+
+    function selectQuickRange(days){
+      if(days===0){
+        document.getElementById('startDate').value='';
+        document.getElementById('endDate').value='';
+        loadAll();
+        return;
+      }
+      const end=new Date();
+      const start=new Date(end.getTime()-(days-1)*86400000);
+      document.getElementById('startDate').value=formatDate(start);
+      document.getElementById('endDate').value=formatDate(end);
+      loadAll();
+    }
+
+    function applyDefaultRange(){
+      const {start,end}=computeDefaultDates();
+      document.getElementById('startDate').value=start;
+      document.getElementById('endDate').value=end;
+      loadAll();
+    }
+
+    applyDefaultRange();
   </script>
 </body>
 </html>
