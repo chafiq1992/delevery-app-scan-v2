@@ -422,7 +422,7 @@
         </div>
         <div class="customer-info">
           <div class="customer-name">${o.customerName||'N/A'}</div>
-          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="#" class="wa-btn" onclick="return openWhatsapp('${o.orderName}', '${waUrl}')">💬</a></div>`:''}
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}" class="wa-btn" target="_blank" onclick="return recordWhatsapp('${o.orderName}', '${waUrl}')">💬</a></div>`:''}
           <div class="address">📍 ${o.address||'No address provided'}</div>
           ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
           <div id="comm-${o.orderName}" class="comm-log"></div>
@@ -571,16 +571,11 @@
     displayCommunicationLog(order);
     return true;
   }
-  function openWhatsapp(order,href){
-    recordWhatsapp(order,href);
-    window.open(href,'_blank');
-    return false;
-  }
   function displayCommunicationLog(order){
     const log=getCommLog(order);
     const el=document.getElementById('comm-'+order);
     if(!el) return;
-    const calls=(log.calls||[]).map(t=>'\ud83d\udcde '+t).join('\n');
+    const calls=(log.calls||[]).map(t=>'\u260E\ufe0f '+t).join('\n');
     const whats=(log.whats||[]).map(t=>'\ud83d\udc8c '+t).join('\n');
     el.textContent=[calls,whats].filter(Boolean).join('\n');
   }
@@ -710,8 +705,7 @@
     applyDefaultRange,
     selectQuickRange,
     recordCall,
-    recordWhatsapp,
-    openWhatsapp
+    recordWhatsapp
   });
 
   /* ─────────────────────────────────────────────────────────────
