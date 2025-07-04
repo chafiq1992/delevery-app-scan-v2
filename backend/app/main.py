@@ -629,7 +629,7 @@ def _compute_stats(
         end_date = None
 
     total = delivered = returned = 0
-    collect = fees = 0.0
+    collect = fees = canceled_amount = 0.0
     for r in rows:
         scan_day = r[12]
         try:
@@ -650,6 +650,7 @@ def _compute_stats(
             fees += fee
         elif status in ("Returned", "Annulé", "Refusé"):
             returned += 1
+            canceled_amount += cash
 
     rate = (delivered / total * 100) if total else 0
     return {
@@ -659,6 +660,7 @@ def _compute_stats(
         "totalCollect": collect,
         "totalFees": fees,
         "deliveryRate": rate,
+        "canceledAmount": canceled_amount,
     }
 
 
