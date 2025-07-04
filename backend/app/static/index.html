@@ -104,6 +104,13 @@
     .schedule-input{padding:0.3rem;border:2px solid #ddd;border-radius:6px}
     .urgent-icon{color:#f44336;font-size:1.2rem}
     .order-card.urgent{border-left-color:#f44336}
+
+    /* Range selector styles */
+    .range-picker{display:flex;justify-content:center;gap:1rem;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap}
+    .quick-ranges{display:flex;flex-direction:column;gap:0.5rem;max-height:180px;overflow-y:auto;padding-right:0.5rem}
+    .quick-ranges button{padding:0.5rem 1rem;border:none;background:#f0f0f0;border-radius:6px;cursor:pointer}
+    .quick-ranges button:hover{background:#e0e0e0}
+    .custom-range{display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center}
     
     @media (max-width:768px){
       .tab-content{padding:1rem}
@@ -165,23 +172,24 @@
   </div>
 
   <div id="stats-tab" class="tab-content">
-    <div style="text-align:center;margin-bottom:1rem;">
-      <select id="statsRange" onchange="loadStats(this.value)">
-        <option value="7">Last 7 days</option>
-        <option value="15" selected>Last 15 days</option>
-        <option value="30">Last 30 days</option>
-        <option value="0">Since start</option>
-      </select>
-      <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:center;align-items:center;flex-wrap:wrap;">
+    <div class="range-picker">
+      <div class="quick-ranges">
+        <button onclick="selectQuickRange(7)">Last 7 days</button>
+        <button onclick="selectQuickRange(15)">Last 15 days</button>
+        <button onclick="selectQuickRange(30)">Last 30 days</button>
+        <button onclick="selectQuickRange(90)">Last 90 days</button>
+        <button onclick="selectQuickRange(0)">Since start</button>
+      </div>
+      <div class="custom-range">
         <input type="date" id="startDate">
         <span>to</span>
         <input type="date" id="endDate">
-        <button class="scan-btn" style="padding:0.5rem 1rem;font-size:1rem;" onclick="loadStatsRange()">📅 Load Range</button>
+        <button class="scan-btn" style="padding:0.5rem 1rem;font-size:1rem;" onclick="loadStatsRange()">Apply</button>
       </div>
     </div>
     <div id="statsContainer" class="payout-container">
       <div class="loading">Click to load stats</div>
-      <button class="scan-btn" onclick="loadStats()">📊 Load Stats</button>
+      <button class="scan-btn" onclick="applyDefaultRange()">📊 Load Stats</button>
     </div>
   </div>
 
@@ -229,6 +237,7 @@
       updateTime();
       setInterval(updateTime, 60000);
       loadStatsHeader();
+      applyDefaultRange();
 
     
   /* ─────────────────────────────────────────────────────────────
@@ -245,8 +254,41 @@
     el.style.color = rate >= 80 ? '#4caf50' : rate >= 60 ? '#ffb300' : '#f44336';
   }
 
+  function formatDate(d){
+    return d.toISOString().split('T')[0];
+  }
+
+  function computeDefaultDates(){
+    const now = new Date();
+    const end = new Date(now.getTime() - 3*86400000);
+    const start = new Date(end.getTime() - 29*86400000);
+    return {start: formatDate(start), end: formatDate(end)};
+  }
+
+  function applyDefaultRange(){
+    const {start, end} = computeDefaultDates();
+    document.getElementById('startDate').value = start;
+    document.getElementById('endDate').value = end;
+    loadStatsRange();
+  }
+
+  function selectQuickRange(days){
+    if(days===0){
+      document.getElementById('startDate').value='';
+      document.getElementById('endDate').value='';
+      loadStats(0);
+      return;
+    }
+    const end = new Date();
+    const start = new Date(end.getTime() - (days-1)*86400000);
+    document.getElementById('startDate').value = formatDate(start);
+    document.getElementById('endDate').value   = formatDate(end);
+    loadStatsRange();
+  }
+
   function loadStatsHeader(){
-    apiGet(`/stats?driver=${driver_id}&days=15`).then(s=>{
+    const {start, end} = computeDefaultDates();
+    apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`).then(s=>{
       if(s && typeof s.deliveryRate==='number') updateDeliveryRateDisplay(s.deliveryRate);
     });
   }
@@ -261,7 +303,7 @@
     document.getElementById(`${t}-tab`).classList.add('active');
     if(t==='orders' && !orders.length)  loadOrders();
     if(t==='payouts' && !payouts.length) loadPayouts();
-    if(t==='stats') loadStats();
+    if(t==='stats') applyDefaultRange();
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -660,6 +702,8 @@
     markPayoutPaid,
     loadStats,
     loadStatsRange,
+    applyDefaultRange,
+    selectQuickRange,
     recordCall,
     recordWhatsapp
   });
