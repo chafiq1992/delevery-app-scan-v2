@@ -422,7 +422,7 @@
         </div>
         <div class="customer-info">
           <div class="customer-name">${o.customerName||'N/A'}</div>
-          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><button class="phone-btn" onclick="recordCall('${o.orderName}','${o.customerPhone}')">📞</button><button class="wa-btn" onclick="recordWhatsapp('${o.orderName}','${waUrl}')">💬</button></div>`:''}
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}" class="wa-btn" target="_blank" onclick="recordWhatsapp('${o.orderName}', '${waUrl}')">💬</a></div>`:''}
           <div class="address">📍 ${o.address||'No address provided'}</div>
           ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
           <div id="comm-${o.orderName}" class="comm-log"></div>
@@ -557,19 +557,19 @@
   function saveCommLog(order,log){
     localStorage.setItem('log_'+order,JSON.stringify(log));
   }
-  function recordCall(order,phone){
+  function recordCall(order,href){
     const log=getCommLog(order);log.calls=log.calls||[];
     log.calls.push(new Date().toLocaleString());
     saveCommLog(order,log);
     displayCommunicationLog(order);
-    window.location.href='tel:'+phone;
+    return true;
   }
-  function recordWhatsapp(order,url){
+  function recordWhatsapp(order,href){
     const log=getCommLog(order);log.whats=log.whats||[];
     log.whats.push(new Date().toLocaleString());
     saveCommLog(order,log);
     displayCommunicationLog(order);
-    window.open(url,'_blank');
+    return true;
   }
   function displayCommunicationLog(order){
     const log=getCommLog(order);
