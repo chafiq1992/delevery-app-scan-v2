@@ -414,7 +414,10 @@
         `أتوفر على طلبك رقم ${o.orderName} بمبلغ إجمالي ${o.cashAmount||0} درهم. ` +
         `المرجو إرسال موقعك عبر خرائط جوجل لتسليم الطلب إلى عنوانك الصحيح.`
       );
-      const waUrl = `https://wa.me/${o.customerPhone}?text=${waMsg}`;
+      const sanitizedPhone = (o.customerPhone || '').replace(/\D+/g, '');
+      const waUrl = sanitizedPhone
+        ? `https://wa.me/${sanitizedPhone}?text=${waMsg}`
+        : '';
       h += `<div class="order-card ${delivered?'delivered':''}">
         <div class="order-header">
           <div class="order-name">${o.orderName}</div>
@@ -422,7 +425,7 @@
         </div>
         <div class="customer-info">
           <div class="customer-name">${o.customerName||'N/A'}</div>
-          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}"
+          ${sanitizedPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}"
         target="_blank"
         class="wa-btn"
         onclick="return recordWhatsapp('${o.orderName}')">💬</a></div>`:''}
