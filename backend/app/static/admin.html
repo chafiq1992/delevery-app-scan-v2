@@ -44,6 +44,7 @@
         <th>Total Orders</th>
         <th>Delivered</th>
         <th>Returned</th>
+        <th>Canceled DH</th>
         <th>Delivery Rate</th>
         <th>Total Collect</th>
         <th>Total Fees</th>
@@ -98,6 +99,7 @@
                       <td>${s.totalOrders||0}</td>
                       <td>${s.delivered||0}</td>
                       <td>${s.returned||0}</td>
+                      <td>${(s.canceledAmount||0).toFixed(2)}</td>
                       <td>${(s.deliveryRate||0).toFixed(0)}%</td>
                       <td>${(s.totalCollect||0).toFixed(2)}</td>
                       <td>${(s.totalFees||0).toFixed(2)}</td>
