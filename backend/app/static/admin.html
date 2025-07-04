@@ -7,11 +7,18 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <style>
     body{font-family:sans-serif;background:#f5f7fa;}
+    .logo-icon{width:120px;height:auto;margin:0 auto;display:block}
+    .main-header{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1rem;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <h1 class="text-3xl font-bold text-center text-blue-800 mb-6">Admin Dashboard</h1>
+  <div class="bg-white py-2 shadow">
+    <img src="favicon.png" alt="Logo" class="logo-icon" />
+  </div>
+  <div class="main-header mb-6">
+    <h1 class="text-3xl font-bold">Admin Dashboard</h1>
+  </div>
   <div class="range-picker flex justify-center gap-4 flex-wrap mb-4">
     <div class="quick-ranges flex flex-col gap-2 max-h-44 overflow-y-auto pr-2">
       <button onclick="selectQuickRange(7)" class="px-3 py-1 bg-gray-100 rounded">Last 7 days</button>
@@ -24,9 +31,15 @@
       <input type="date" id="startDate" class="border p-1 rounded">
       <span>to</span>
       <input type="date" id="endDate" class="border p-1 rounded">
-      <button class="px-4 py-1 bg-blue-600 text-white rounded" onclick="loadAll()">Apply</button>
+    <button class="px-4 py-1 bg-blue-600 text-white rounded" onclick="loadAll()">Apply</button>
     </div>
   </div>
+
+  <div class="flex justify-center my-4">
+    <input id="searchInput" type="text" placeholder="Search by order # or phone" class="border p-2 rounded w-64 md:w-80" />
+    <button onclick="performSearch()" class="ml-2 px-4 py-2 bg-blue-600 text-white rounded">Search</button>
+  </div>
+  <div id="searchResults" class="max-w-4xl mx-auto grid gap-4"></div>
 
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 my-6 max-w-6xl mx-auto">
     <div class="bg-white p-4 rounded shadow text-center">
@@ -75,9 +88,9 @@
 
   <div id="alertBox" class="text-center text-sm bg-yellow-100 text-yellow-800 p-2 hidden"></div>
 
-  <canvas id="trendChart" class="w-full max-w-4xl mx-auto my-6"></canvas>
-  <canvas id="statsChart" style="max-width:600px;margin:2rem auto;display:block;"></canvas>
-  <canvas id="summaryChart" style="max-width:600px;margin:2rem auto;display:block;"></canvas>
+  <canvas id="trendChart" class="w-full max-w-4xl mx-auto my-6" style="height:300px;"></canvas>
+  <canvas id="statsChart" style="max-width:600px;margin:2rem auto;display:block;height:300px;"></canvas>
+  <canvas id="summaryChart" style="max-width:600px;margin:2rem auto;display:block;height:300px;"></canvas>
 
   <script>
     function formatDate(d){
@@ -188,6 +201,24 @@
       window.trendChart=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Delivered / day',data,fill:false,borderColor:'#2196f3'}]},options:{responsive:true,maintainAspectRatio:false}});
     }
 
+    async function performSearch(){
+      const q=document.getElementById('searchInput').value.trim();
+      const container=document.getElementById('searchResults');
+      if(!q){container.innerHTML='';return;}
+      const res=await fetch(`/admin/search?q=${encodeURIComponent(q)}`).then(r=>r.json()).catch(()=>[]);
+      if(!res.length){container.innerHTML='<div class="text-center text-gray-500">No results</div>';return;}
+      let html='';
+      res.forEach(o=>{
+        html+=`<div class="bg-white p-4 rounded shadow">
+                  <div class="font-bold">${o.orderName} <span class="text-sm text-gray-600">(${o.driver})</span></div>
+                  <div>${o.customerName||''}</div>
+                  <div>${o.customerPhone||''}</div>
+                  <div class="text-sm text-gray-700">Status: ${o.deliveryStatus}</div>
+               </div>`;
+      });
+      container.innerHTML=html;
+    }
+
     function showAlert(message){
       const el=document.getElementById('alertBox');
       el.textContent=message;
@@ -216,6 +247,7 @@
       loadAll();
     }
 
+    document.getElementById('searchInput').addEventListener('keypress',e=>{if(e.key==='Enter')performSearch();});
     applyDefaultRange();
   </script>
 </body>
