@@ -252,6 +252,20 @@ def get_cell(row, idx, default=""):
     return row[idx] if idx < len(row) else default
 
 
+def parse_timestamp(val: str) -> dt.datetime:
+    """Parse timestamp strings with optional microseconds and timezone."""
+    val = (val or "").strip()
+    parts = val.split()
+    if len(parts) > 2 and parts[-1].isalpha():
+        val = " ".join(parts[:-1])
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return dt.datetime.strptime(val, fmt)
+        except ValueError:
+            continue
+    return dt.datetime.fromisoformat(val)
+
+
 def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
     """Call Shopify Admin API by order name (#1234)."""
     auth = (store_cfg["api_key"], store_cfg["password"])
@@ -484,10 +498,10 @@ def list_active_orders(driver: str = Query(...)):
     def sort_key(o):
         if o["scheduledTime"]:
             try:
-                return dt.datetime.strptime(o["scheduledTime"], "%Y-%m-%d %H:%M:%S")
+                return parse_timestamp(o["scheduledTime"])
             except Exception:
                 pass
-        return dt.datetime.strptime(o["timestamp"], "%Y-%m-%d %H:%M:%S")
+        return parse_timestamp(o["timestamp"])
 
     active.sort(key=sort_key)
 
@@ -495,7 +509,7 @@ def list_active_orders(driver: str = Query(...)):
     for o in active:
         if o["scheduledTime"]:
             try:
-                st = dt.datetime.strptime(o["scheduledTime"], "%Y-%m-%d %H:%M:%S")
+                st = parse_timestamp(o["scheduledTime"])
                 o["urgent"] = (st - now).total_seconds() <= 3600
             except Exception:
                 o["urgent"] = False
@@ -808,7 +822,7 @@ def archive_yesterday():
     for row in data[1:]:
         ts_str = row[0]
         try:
-            ts = dt.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+            ts = parse_timestamp(ts_str)
         except ValueError:
             keep_rows.append(row)
             continue
