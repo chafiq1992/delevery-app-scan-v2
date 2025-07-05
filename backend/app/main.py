@@ -77,6 +77,10 @@ COMPLETED_STATUSES  = ["Livré", "Annulé", "Refusé", "Returned"]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
+# Employee log configuration
+EMPLOYEE_TAB = os.getenv("EMPLOYEE_TAB", "Employee_Log")
+
+
 # Cache for opened worksheets to avoid repeated API calls
 sheet_cache = TTLCache(maxsize=32, ttl=300)
 
@@ -129,6 +133,12 @@ class StatusUpdate(BaseModel):
 
 class ManualAdd(BaseModel):
     order_name: str
+
+
+class EmployeeLog(BaseModel):
+    employee: str
+    order: Optional[str] = None
+    amount: Optional[float] = None
 
 
 # ───────────────────────────────────────────────────────────────
@@ -293,6 +303,10 @@ ORDER_HEADER = [
 PAYOUT_HEADER = [
     "Payout ID", "Date Created", "Orders", "Total Cash",
     "Total Fees", "Total Payout", "Status", "Date Paid"
+]
+
+EMPLOYEE_HEADER = [
+    "Timestamp", "Employee", "Order Number", "Amount"
 ]
 
 
@@ -805,6 +819,16 @@ def admin_search(q: str = Query(...)):
                     "address": get_cell(r, 4),
                 })
     return results
+
+
+# ---------------------------- EMPLOYEES -------------------------------
+@app.post("/employee/log", tags=["employees"])
+def employee_log(entry: EmployeeLog):
+    """Append an employee action row to the configured sheet."""
+    ws = _get_or_create_sheet(EMPLOYEE_TAB, EMPLOYEE_HEADER)
+    ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ws.append_row([ts, entry.employee, entry.order or "", entry.amount or ""])
+    return {"success": True}
 
 
 @app.post("/archive-yesterday", tags=["maintenance"])
