@@ -831,6 +831,22 @@ def employee_log(entry: EmployeeLog):
     return {"success": True}
 
 
+@app.get("/employee/logs", tags=["employees"])
+def employee_logs():
+    """Return all employee log rows as a list of dictionaries."""
+    ws = _get_or_create_sheet(EMPLOYEE_TAB, EMPLOYEE_HEADER)
+    rows = ws.get_all_values()[1:]
+    logs = []
+    for r in rows:
+        logs.append({
+            "timestamp": get_cell(r, 0),
+            "employee": get_cell(r, 1),
+            "order": get_cell(r, 2),
+            "amount": safe_float(get_cell(r, 3)) if get_cell(r, 3) else None,
+        })
+    return logs
+
+
 @app.post("/archive-yesterday", tags=["maintenance"])
 def archive_yesterday():
     ws = _get_or_create_sheet(SHEET_NAME, ORDER_HEADER)
