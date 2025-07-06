@@ -21,6 +21,7 @@
     <input id="amount" type="number" placeholder="Amount (DH)" />
     <button onclick="submitLog()">Submit</button>
     <div id="msg" style="color:green"></div>
+    <ul id="logList" style="text-align:left;margin-top:1rem"></ul>
   </div>
 <script>
 function submitLog(){
@@ -41,6 +42,23 @@ function submitLog(){
     }
   }).catch(()=>{document.getElementById('msg').textContent='Error';});
 }
+
+function loadLogs(){
+  fetch('/employee/logs')
+    .then(r=>r.json())
+    .then(data=>{
+      const list=document.getElementById('logList');
+      list.innerHTML='';
+      if(Array.isArray(data)){
+        data.forEach(l=>{
+          const li=document.createElement('li');
+          li.textContent=`${l.timestamp} - ${l.employee} - ${l.order} - ${l.amount}`;
+          list.appendChild(li);
+        });
+      }
+    }).catch(()=>{});
+}
+window.addEventListener('DOMContentLoaded',loadLogs);
 </script>
 </body>
 </html>
