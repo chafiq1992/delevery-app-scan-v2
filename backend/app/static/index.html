@@ -238,6 +238,16 @@
       setInterval(updateTime, 60000);
       loadStatsHeader();
       applyDefaultRange();
+      loadOrders();
+      loadPayouts();
+      setInterval(() => {
+        if(document.getElementById('orders-tab').classList.contains('active')) {
+          loadOrders();
+        }
+        if(document.getElementById('payouts-tab').classList.contains('active')) {
+          loadPayouts();
+        }
+      }, 30000);
 
     
   /* ─────────────────────────────────────────────────────────────

@@ -181,9 +181,10 @@ DRIVERS = {
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 # In-memory caches for orders and payouts
-orders_cache = TTLCache(maxsize=8, ttl=300)    # five minutes
-payouts_cache = TTLCache(maxsize=8, ttl=300)
-orders_data_cache = TTLCache(maxsize=8, ttl=120)
+# shorter TTLs for near real-time updates
+orders_cache = TTLCache(maxsize=8, ttl=60)
+payouts_cache = TTLCache(maxsize=8, ttl=60)
+orders_data_cache = TTLCache(maxsize=8, ttl=60)
 
 @app.get("/", response_class=HTMLResponse)
 async def show_login():
@@ -373,6 +374,36 @@ def add_to_payout(ws_orders: gspread.Worksheet, payout_ws: gspread.Worksheet,
         ws_orders.update_cell(row_idx, 16, payout_id)
 
     return payout_id
+
+
+def remove_from_payout(ws_orders: gspread.Worksheet, payout_ws: gspread.Worksheet,
+                       payout_id: str, order_name: str,
+                       cash_amount: float, driver_fee: float) -> None:
+    """Remove an order from an existing payout line."""
+    if not payout_id:
+        return
+    cells = payout_ws.findall(payout_id)
+    if not cells:
+        return
+    row_idx = cells[0].row
+    row = payout_ws.row_values(row_idx)
+
+    orders_list = [o.strip() for o in (row[2] or "").split(',') if o.strip()]
+    if order_name not in orders_list:
+        return
+    orders_list.remove(order_name)
+
+    cash_total = safe_float(get_cell(row, 3)) - cash_amount
+    fee_total = safe_float(get_cell(row, 4)) - driver_fee
+    payout_total = cash_total - fee_total
+
+    payout_ws.update("C{}:F{}".format(row_idx, row_idx),
+                     [[", ".join(orders_list), cash_total, fee_total, payout_total]])
+
+    # clear payout ID from order row
+    order_cells = ws_orders.findall(order_name)
+    if order_cells:
+        ws_orders.update_cell(order_cells[0].row, 16, "")
 
 
 # ───────────────────────────────────────────────────────────────
@@ -567,12 +598,18 @@ def update_order_status(
     if payload.cash_amount is not None:
         ws_orders.update_cell(row, 14, payload.cash_amount)
 
-    # add to payout if freshly delivered
+    # add or remove from payout depending on status change
     if payload.new_status == "Livré" and row_vals[9] != "Livré":
         driver_fee = calculate_driver_fee(row_vals[5])
         cash_amt = payload.cash_amount or safe_float(get_cell(row_vals, 13))
         add_to_payout(ws_orders, ws_payouts,
                       payload.order_name, cash_amt, driver_fee)
+    elif payload.new_status and payload.new_status != "Livré" and row_vals[9] == "Livré":
+        driver_fee = safe_float(get_cell(row_vals, 14))
+        cash_amt = payload.cash_amount if payload.cash_amount is not None else safe_float(get_cell(row_vals, 13))
+        payout_id = get_cell(row_vals, 15)
+        remove_from_payout(ws_orders, ws_payouts, payout_id,
+                           payload.order_name, cash_amt, driver_fee)
 
     # clean up list if returned
     if payload.new_status == "Returned":
