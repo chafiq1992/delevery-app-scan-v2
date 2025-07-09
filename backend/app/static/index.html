@@ -412,6 +412,9 @@
       </div>`;
 
     orders.forEach(o=>{
+      if(o.commLog){
+        try{ saveCommLog(o.orderName, JSON.parse(o.commLog)); }catch(e){};
+      }
       const tc = getPrimaryTag(o.tags);
       const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
       const fee = isExchange ? 10 : 20;
@@ -574,6 +577,8 @@
     const log=getCommLog(order);log.calls=log.calls||[];
     log.calls.push(new Date().toLocaleString());
     saveCommLog(order,log);
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: order, comm_log: JSON.stringify(log)}).catch(()=>{});
     displayCommunicationLog(order);
     return true;
   }
@@ -582,6 +587,8 @@
     log.whats  = log.whats || [];
     log.whats.push(new Date().toLocaleString());
     saveCommLog(order, log);
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: order, comm_log: JSON.stringify(log)}).catch(()=>{});
     displayCommunicationLog(order);
     return true;          // let the <a> continue to WhatsApp
   }
