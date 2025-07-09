@@ -129,6 +129,7 @@ class StatusUpdate(BaseModel):
     note: Optional[str] = None
     cash_amount: Optional[float] = None
     scheduled_time: Optional[str] = None
+    comm_log: Optional[str] = None
 
 
 class ManualAdd(BaseModel):
@@ -298,7 +299,7 @@ ORDER_HEADER = [
     "Timestamp", "Order Name", "Customer Name", "Customer Phone",
     "Address", "Tags", "Fulfillment", "Order Status",
     "Store", "Delivery Status", "Notes", "Scheduled Time", "Scan Date",
-    "Cash Amount", "Driver Fee", "Payout ID", "Status Log"
+    "Cash Amount", "Driver Fee", "Payout ID", "Status Log", "Comm Log"
 ]
 
 PAYOUT_HEADER = [
@@ -539,6 +540,7 @@ def list_active_orders(driver: str = Query(...)):
             "driverFee":    safe_float(get_cell(r, 14)),
             "payoutId":     r[15],
             "statusLog":    get_cell(r, 16),
+            "commLog":      get_cell(r, 17),
         })
     def sort_key(o):
         if o["scheduledTime"]:
@@ -581,7 +583,7 @@ def update_order_status(
     row = cells[0].row
     row_vals = ws_orders.row_values(row)
 
-    # ensure row has at least 17 columns
+    # ensure row has at least 18 columns
     if len(row_vals) < len(ORDER_HEADER):
         row_vals += [""] * (len(ORDER_HEADER) - len(row_vals))
 
@@ -597,6 +599,8 @@ def update_order_status(
         ws_orders.update_cell(row, 12, payload.scheduled_time)
     if payload.cash_amount is not None:
         ws_orders.update_cell(row, 14, payload.cash_amount)
+    if payload.comm_log is not None:
+        ws_orders.update_cell(row, 18, payload.comm_log)
 
     # add or remove from payout depending on status change
     if payload.new_status == "Livré" and row_vals[9] != "Livré":
