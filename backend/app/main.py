@@ -29,7 +29,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from .db import get_session, Driver, Order, Payout, EmployeeLog
+from .db import get_session, init_db, Driver, Order, Payout, EmployeeLog
 
 # ───────────────────────────────────────────────────────────────
 # CONFIGURATION  ––––– edit via env-vars in Render dashboard
@@ -100,6 +100,11 @@ class EmployeeLog(BaseModel):
 # FastAPI init + CORS (mobile apps & localhost dev)
 # ───────────────────────────────────────────────────────────────
 app = FastAPI(title="Delivery FastAPI backend")
+
+
+@app.on_event("startup")
+async def startup_event():
+    await init_db()
 
 # ✅ Define the path correctly
 static_path = os.path.join(os.path.dirname(__file__), "static")
