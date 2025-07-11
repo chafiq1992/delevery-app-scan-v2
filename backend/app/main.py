@@ -354,77 +354,93 @@ async def scan(
                 tag=get_primary_display_tag(existing.tags),
                 deliveryStatus=existing.delivery_status,
             )
-        # --- Shopify look-up (unchanged) ----------------------------------
-        window_start = dt.datetime.now(timezone.utc) - dt.timedelta(days=50)
-        chosen_order, chosen_store_name = None, ""
-        for store in SHOPIFY_STORES:
-            order = get_order_from_store(order_number, store)
-            if order:
-                created_at = dt.datetime.fromisoformat(
-                    order["created_at"].replace("Z", "+00:00")
-                )
-                if created_at >= window_start and (
-                    not chosen_order
-                    or created_at > dt.datetime.fromisoformat(
-                        chosen_order["created_at"].replace("Z", "+00:00")
-                    )
-                ):
-                    chosen_order, chosen_store_name = order, store["name"]
+    barcode = payload.barcode.strip()
+    order_number = "#" + "".join(filter(str.isdigit, barcode))
 
-        tags = chosen_order.get("tags", "") if chosen_order else ""
-        fulfillment = chosen_order.get("fulfillment_status", "unfulfilled") if chosen_order else ""
-        order_status = "closed" if (chosen_order and chosen_order.get("cancelled_at")) else "open"
-        customer_name = phone = address = ""
-        cash_amount = 0.0
-        result_msg = "❌ Not found"
+    if len(order_number) <= 1:
+        raise HTTPException(status_code=400, detail="Invalid barcode")
 
-        if chosen_order:
-            result_msg = (
-                "⚠️ Cancelled" if chosen_order.get("cancelled_at")
-                else "❌ Unfulfilled" if fulfillment != "fulfilled"
-                else "✅ OK"
-            )
-            cash_amount = float(chosen_order.get("total_outstanding") or chosen_order.get("total_price") or 0)
-            if chosen_order.get("shipping_address"):
-                sa = chosen_order["shipping_address"]
-                customer_name = sa.get("name", "")
-                phone = sa.get("phone", "") or chosen_order.get("phone", "")
-                address = ", ".join(filter(None, [
-                    sa.get("address1"), sa.get("address2"),
-                    sa.get("city"), sa.get("province")
-                ]))
-
-        now_ts   = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        scan_day = dt.datetime.now().strftime("%Y-%m-%d")
-        driver_fee = calculate_driver_fee(tags)
-
-        order = Order(
-            driver_id=driver,
-            timestamp=dt.datetime.strptime(now_ts, "%Y-%m-%d %H:%M:%S"),
-            order_name=order_number,
-            customer_name=customer_name,
-            customer_phone=phone,
-            address=address,
-            tags=tags,
-            fulfillment=fulfillment,
-            order_status=order_status,
-            store=chosen_store_name,
-            delivery_status="Dispatched",
-            notes="",
-            scheduled_time="",
-            scan_date=scan_day,
-            cash_amount=cash_amount,
-            driver_fee=driver_fee,
-        )
-        session.add(order)
-        await session.commit()_code=400, detail="Invalid barcode")
-        
+    # already scanned?
+    if order_exists(ws_orders, order_number):
+        existing = get_order_row(ws_orders, order_number)
         return ScanResult(
-            result=result_msg,
+            result="⚠️ Already scanned",
             order=order_number,
-            tag=get_primary_display_tag(tags),
-            deliveryStatus="Dispatched",
+            tag=get_primary_display_tag(existing[5]),
+            deliveryStatus=existing[9],
         )
+
+    # --- Shopify look-up (unchanged) ----------------------------------
+    window_start = dt.datetime.now(timezone.utc) - dt.timedelta(days=50)
+    chosen_order, chosen_store_name = None, ""
+    for store in SHOPIFY_STORES:
+        order = get_order_from_store(order_number, store)
+        if order:
+            created_at = dt.datetime.fromisoformat(
+                order["created_at"].replace("Z", "+00:00")
+            )
+            if created_at >= window_start and (
+                not chosen_order
+                or created_at > dt.datetime.fromisoformat(
+                    chosen_order["created_at"].replace("Z", "+00:00")
+                )
+            ):
+                chosen_order, chosen_store_name = order, store["name"]
+
+    tags = chosen_order.get("tags", "") if chosen_order else ""
+    fulfillment = chosen_order.get("fulfillment_status", "unfulfilled") if chosen_order else ""
+    order_status = "closed" if (chosen_order and chosen_order.get("cancelled_at")) else "open"
+    customer_name = phone = address = ""
+    cash_amount = 0.0
+    result_msg = "❌ Not found"
+
+    if chosen_order:
+        result_msg = (
+            "⚠️ Cancelled" if chosen_order.get("cancelled_at")
+            else "❌ Unfulfilled" if fulfillment != "fulfilled"
+            else "✅ OK"
+        )
+        cash_amount = float(chosen_order.get("total_outstanding") or chosen_order.get("total_price") or 0)
+        if chosen_order.get("shipping_address"):
+            sa = chosen_order["shipping_address"]
+            customer_name = sa.get("name", "")
+            phone = sa.get("phone", "") or chosen_order.get("phone", "")
+            address = ", ".join(filter(None, [
+                sa.get("address1"), sa.get("address2"),
+                sa.get("city"), sa.get("province")
+            ]))
+
+    now_ts   = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    scan_day = dt.datetime.now().strftime("%Y-%m-%d")
+    driver_fee = calculate_driver_fee(tags)
+
+    order = Order(
+        driver_id=driver,
+        timestamp=dt.datetime.strptime(now_ts, "%Y-%m-%d %H:%M:%S"),
+        order_name=order_number,
+        customer_name=customer_name,
+        customer_phone=phone,
+        address=address,
+        tags=tags,
+        fulfillment=fulfillment,
+        order_status=order_status,
+        store=chosen_store_name,
+        delivery_status="Dispatched",
+        notes="",
+        scheduled_time="",
+        scan_date=scan_day,
+        cash_amount=cash_amount,
+        driver_fee=driver_fee,
+    )
+    session.add(order)
+    await session.commit()
+
+    return ScanResult(
+        result=result_msg,
+        order=order_number,
+        tag=get_primary_display_tag(tags),
+        deliveryStatus="Dispatched",
+    )
 
 # -----------------------------  ORDERS  -------------------------------
 @app.get("/orders", tags=["orders"])
@@ -806,4 +822,3 @@ async def employee_logs():
                 "amount": r.amount,
             })
         return logs
-
