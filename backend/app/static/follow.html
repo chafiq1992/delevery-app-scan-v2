@@ -150,7 +150,7 @@ function renderSection(dataObj,container,includeInputs){
         <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
         <div>${o.address||''}</div>
         <div>Timestamp: ${o.timestamp}</div>
-        ${o.notes?`<div class="driver-notes">Driver: ${o.notes}</div>`:''}`;
+        ${o.driverNotes?`<div class="driver-notes">Driver:<br>${o.driverNotes.replace(/\n/g,'<br>')}</div>`:''}`;
       if(includeInputs){
         html+=`<select class="status-select" onchange="updateOrderStatus('${d}','${o.orderName}',this.value)">`+
         deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')+

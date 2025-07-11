@@ -89,6 +89,7 @@ class StatusUpdate(BaseModel):
     order_name: str
     new_status: Optional[str] = None  # one of DELIVERY_STATUSES
     note: Optional[str] = None
+    driver_note: Optional[str] = None
     cash_amount: Optional[float] = None
     scheduled_time: Optional[str] = None
     comm_log: Optional[str] = None
@@ -547,6 +548,7 @@ async def list_active_orders(driver: str = Query(...)):
                     "tags": o.tags,
                     "deliveryStatus": o.delivery_status or "Dispatched",
                     "notes": o.notes,
+                    "driverNotes": o.driver_notes,
                     "scheduledTime": o.scheduled_time,
                     "scanDate": o.scan_date,
                     "cashAmount": o.cash_amount or 0,
@@ -612,6 +614,7 @@ async def list_archived_orders(driver: str = Query(...)):
                     "tags": o.tags,
                     "deliveryStatus": o.delivery_status or "Dispatched",
                     "notes": o.notes,
+                    "driverNotes": o.driver_notes,
                     "scheduledTime": o.scheduled_time,
                     "scanDate": o.scan_date,
                     "cashAmount": o.cash_amount or 0,
@@ -676,6 +679,7 @@ async def list_followup_orders(driver: str = Query(...)):
                         "tags": o.tags,
                         "deliveryStatus": o.delivery_status or "Dispatched",
                         "notes": o.notes,
+                        "driverNotes": o.driver_notes,
                         "scheduledTime": o.scheduled_time,
                         "scanDate": o.scan_date,
                         "cashAmount": o.cash_amount or 0,
@@ -715,6 +719,9 @@ async def update_order_status(
             ).strip(" |")
         if payload.note is not None:
             order.notes = payload.note
+        if payload.driver_note is not None:
+            ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+            order.driver_notes = ((order.driver_notes or "") + f"{ts} - {payload.driver_note}\n").lstrip()
         if payload.scheduled_time is not None:
             order.scheduled_time = payload.scheduled_time
         if payload.cash_amount is not None:

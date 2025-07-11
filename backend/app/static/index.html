@@ -62,9 +62,23 @@
     .status-section{display:flex;gap:1rem;align-items:center;margin-top:1rem;flex-wrap:wrap}
     .status-select{padding:0.5rem 1rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;background:white;cursor:pointer;transition:border-color 0.3s ease;min-width:150px}
     .status-select:focus{outline:none;border-color:#004aad}
-    .notes-section{margin-top:1rem}
-    .notes-input{width:100%;padding:0.8rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;resize:vertical;min-height:80px;transition:border-color 0.3s ease}
-    .notes-input:focus{outline:none;border-color:#004aad}
+    .agent-notes{background:#f0f0f0;padding:0.8rem;border-radius:8px;margin-top:0.5rem}
+    .agent-label{font-weight:bold;margin-bottom:0.3rem}
+    .actions-block{margin-top:1rem;border:1px solid #ddd;border-radius:8px}
+    .actions-block summary{padding:0.6rem;font-weight:600;cursor:pointer}
+    .actions-block[open] summary{border-bottom:1px solid #ddd}
+    .actions-content{padding:0.8rem;display:grid;gap:0.8rem}
+    .status-buttons{display:flex;gap:0.5rem;flex-wrap:wrap}
+    .status-btn{flex:1;padding:0.6rem;border:none;border-radius:6px;color:white;font-size:1rem;cursor:pointer}
+    .status-btn.delivered{background:#4caf50}
+    .status-btn.returned{background:#f44336}
+    .status-btn.cancelled{background:#f44336}
+    .status-btn.rescheduled{background:#ff9800;color:white}
+    .driver-notes-section{margin-top:1rem}
+    .driver-note-input{width:100%;padding:0.6rem;border:2px solid #ddd;border-radius:6px;font-size:1rem}
+    .add-note-btn{margin-top:0.5rem;padding:0.6rem 1rem;background:#004aad;color:white;border:none;border-radius:6px;cursor:pointer;width:100%}
+    .notes-list{margin-top:0.5rem;font-size:0.9rem;color:#333}
+    .note-item{background:#f5f5f5;border-radius:6px;padding:0.4rem;margin-bottom:0.3rem}
     .status-log{font-size:0.85rem;color:#444;margin-top:0.5rem;white-space:pre-line}
     .loading,.no-orders{text-align:center;padding:2rem;color:#666;font-size:1.1rem}
     .no-orders{color:#999;font-size:1.2rem;padding:3rem}
@@ -432,27 +446,42 @@
         </div>
         <div class="order-details">
           <div class="detail-item">
-            <div class="detail-label">Cash Amount (DH)</div>
-            <input type="number" class="cash-input" value="${o.cashAmount||''}" placeholder="Enter cash amount"
-                   onchange="updateCashAmount('${o.orderName}',this.value)">
-          </div>
-          <div class="detail-item">
             <div class="detail-label">Driver Fee</div>
             <div class="detail-value fee-display ${isExchange?'fee-exchange':''}">${fee} DH ${isExchange?'(Exchange)':''}</div>
           </div>
         </div>
-        <div class="status-section">
-          <select class="status-select" onchange="updateOrderStatus('${o.orderName}',this.value,this)">
-            ${deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
-          </select>
+        <div class="agent-notes">
+          <div class="agent-label">🧭 Agent Instructions</div>
+          <div class="agent-text">${o.notes||''}</div>
         </div>
-        <div class="schedule-section">
-          <input type="datetime-local" class="schedule-input" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${o.orderName}',this.value)">
-          ${o.urgent?'<span class="urgent-icon">🔔</span>':''}
-          ${o.scheduledTime?`<span class="countdown" data-time="${o.scheduledTime}"></span>`:''}
-        </div>
-        <div class="notes-section">
-          <textarea class="notes-input" placeholder="Add notes…" onchange="updateOrderNotes('${o.orderName}',this.value)">${o.notes||''}</textarea>
+        <details class="actions-block">
+          <summary>Actions</summary>
+          <div class="actions-content">
+            <div class="detail-item">
+              <div class="detail-label">Cash Amount (DH)</div>
+              <input type="number" class="cash-input" value="${o.cashAmount||''}" placeholder="Enter cash amount" onchange="updateCashAmount('${o.orderName}',this.value)">
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">Schedule</div>
+              <input type="datetime-local" class="schedule-input" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${o.orderName}',this.value)">
+              ${o.urgent?'<span class="urgent-icon">🔔</span>':''}
+              ${o.scheduledTime?`<span class="countdown" data-time="${o.scheduledTime}"></span>`:''}
+            </div>
+            <div class="status-buttons">
+              <button class="status-btn delivered" onclick="updateOrderStatus('${o.orderName}','Livré',this)">Delivered</button>
+              <button class="status-btn returned" onclick="updateOrderStatus('${o.orderName}','Returned',this)">Returned</button>
+              <button class="status-btn cancelled" onclick="updateOrderStatus('${o.orderName}','Annulé',this)">Annulé</button>
+              <button class="status-btn rescheduled" onclick="updateOrderStatus('${o.orderName}','Rescheduled',this)">Resched</button>
+            </div>
+            <select class="status-select" onchange="updateOrderStatus('${o.orderName}',this.value,this)">
+              ${deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
+            </select>
+          </div>
+        </details>
+        <div class="driver-notes-section">
+          <textarea id="note-${o.orderName}" class="driver-note-input" placeholder="Add note…"></textarea>
+          <button class="add-note-btn" onclick="addOrderNote('${o.orderName}')">Add Note</button>
+          <div class="notes-list">${(o.driverNotes||'').split('\n').filter(Boolean).map(n=>`<div class="note-item">${n}</div>`).join('')}</div>
           ${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}
         </div>
       </div>`;
@@ -486,9 +515,14 @@
       .catch(e=>alert('Error updating status: '+e));
   }
 
-  function updateOrderNotes(orderName,note){
+  function addOrderNote(orderName){
+    const t=document.getElementById('note-'+orderName);
+    const note=t.value.trim();
+    if(!note) return;
+    t.value='';
     apiPut(`/order/status?driver=${driver_id}`,
-           {order_name: orderName, note})
+           {order_name: orderName, driver_note: note})
+      .then(()=>loadOrders())
       .catch(e=>alert('Error updating notes: '+e));
   }
 
@@ -699,7 +733,7 @@
     manualAdd,
     loadOrders,
     updateOrderStatus,
-    updateOrderNotes,
+    addOrderNote,
     updateCashAmount,
     updateScheduledTime,
     loadPayouts,
