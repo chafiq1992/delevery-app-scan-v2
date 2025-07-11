@@ -82,7 +82,7 @@ function renderOrders(){
         <input type="datetime-local" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${d}','${o.orderName}',this.value)">
         <input type="number" value="${o.cashAmount||''}" placeholder="Cash" onchange="updateCash('${d}','${o.orderName}',this.value)">
         <textarea placeholder="Notes to driver" onchange="updateNotes('${d}','${o.orderName}',this.value)">${o.notes||''}</textarea>
-        <textarea class="follow-log" placeholder="Follow log" onchange="updateFollow('${d}','${o.orderName}',this.value)">${o.followLog||''}</textarea>
+        <textarea class="follow-log" placeholder="Internal comments" onchange="updateFollow('${d}','${o.orderName}',this.value)">${o.followLog||''}</textarea>
         <div id="comm-${key}" class="comm-log"></div>
       </div>`;
     });

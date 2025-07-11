@@ -661,6 +661,7 @@
         📷 Scanner
       </button>
       <button class="nav-tab" onclick="showTab('orders')">📋 Orders</button>
+      <button class="nav-tab" onclick="showTab('calendar')">📅 Calendar</button>
       <button class="nav-tab" onclick="showTab('followups')">
         🚨 Follow-Ups
       </button>
@@ -716,6 +717,15 @@
       <div id="ordersContainer" class="orders-container">
         <div class="loading">Click here to load orders</div>
         <button class="scan-btn" onclick="loadOrders()">📋 Load Orders</button>
+      </div>
+    </div>
+
+    <div id="calendar-tab" class="tab-content">
+      <div style="margin-bottom:1rem;text-align:center;">
+        <input id="calDate" type="date" onchange="showCalendar()"/>
+      </div>
+      <div id="calendarContainer" class="orders-container">
+        <div class="loading">Select a date to view scheduled orders</div>
       </div>
     </div>
 
@@ -975,6 +985,10 @@
           if (t === "orders" && !orders.length) loadOrders();
           if (t === "followups") loadFollowUps();
           if (t === "archive") loadArchive();
+          if (t === "calendar") {
+            if (!orders.length) loadOrders().then(showCalendar);
+            else showCalendar();
+          }
           if (t === "payouts" && !payouts.length) loadPayouts();
           if (t === "stats") applyDefaultRange();
         }
@@ -1051,7 +1065,7 @@
         function loadOrders() {
           document.getElementById("ordersContainer").innerHTML =
             '<div class="loading">Loading orders...</div>';
-          apiGet(`/orders?driver=${driver_id}`)
+          return apiGet(`/orders?driver=${driver_id}`)
             .then(displayOrders)
             .catch(
               (e) =>
@@ -1300,6 +1314,19 @@
           c.innerHTML = h;
           orders.forEach((o) => displayCommunicationLog(o.orderName));
           startCountdown();
+        }
+
+        function showCalendar() {
+          const date = document.getElementById("calDate").value;
+          if (!date) {
+            document.getElementById("calendarContainer").innerHTML =
+              '<div class="no-orders">Select a date</div>';
+            return;
+          }
+          const list = orders.filter(
+            (o) => o.scheduledTime && o.scheduledTime.startsWith(date)
+          );
+          displayOrdersCommon(list, document.getElementById("calendarContainer"), false);
         }
 
         /* ─────────────────────────────────────────────────────────────
@@ -1644,6 +1671,7 @@
           loadStatsRange,
           applyDefaultRange,
           selectQuickRange,
+          showCalendar,
           recordCall,
           recordWhatsapp,
         });
