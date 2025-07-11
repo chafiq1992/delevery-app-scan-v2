@@ -84,6 +84,7 @@ class StatusUpdate(BaseModel):
     cash_amount: Optional[float] = None
     scheduled_time: Optional[str] = None
     comm_log: Optional[str] = None
+    follow_log: Optional[str] = None
 
 
 class ManualAdd(BaseModel):
@@ -430,6 +431,7 @@ async def scan(
             scan_date=scan_day,
             cash_amount=cash_amount,
             driver_fee=driver_fee,
+            follow_log="",
         )
         session.add(order)
         await session.commit()
@@ -475,6 +477,7 @@ async def list_active_orders(driver: str = Query(...)):
                 "payoutId":     o.payout_id,
                 "statusLog":    o.status_log,
                 "commLog":      o.comm_log,
+                "followLog":   o.follow_log,
             })
     def sort_key(o):
         if o["scheduledTime"]:
@@ -529,6 +532,8 @@ async def update_order_status(
             order.cash_amount = payload.cash_amount
         if payload.comm_log is not None:
             order.comm_log = payload.comm_log
+        if payload.follow_log is not None:
+            order.follow_log = payload.follow_log
 
         if payload.new_status == "Livré" and prev_status != "Livré":
             driver_fee = calculate_driver_fee(order.tags)
@@ -787,6 +792,10 @@ async def admin_search(q: str = Query(...)):
                     "deliveryStatus": o.delivery_status or "Dispatched",
                     "cashAmount": o.cash_amount or 0,
                     "address": o.address,
+                    "scheduledTime": o.scheduled_time,
+                    "notes": o.notes,
+                    "followLog": o.follow_log,
+                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
                 })
         return results
 

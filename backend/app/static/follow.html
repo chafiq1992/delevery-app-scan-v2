@@ -5,69 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Follow Agent</title>
   <style>
-    body{font-family:sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);min-height:100vh;margin:0;padding:1rem;}
-    .search-box{display:flex;justify-content:center;margin-bottom:1rem;gap:0.5rem;}
-    .order-card{background:white;border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
-    .order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;font-weight:bold;color:#004aad;}
-    .notes{width:100%;margin-top:0.5rem;padding:0.5rem;border-radius:6px;border:1px solid #ccc;}
-    .comm-log{font-size:0.85rem;color:#444;margin-top:0.3rem;white-space:pre-line;}
-    select{padding:0.4rem;border-radius:6px;}
-    button{padding:0.5rem 1rem;background:#004aad;color:white;border:none;border-radius:6px;cursor:pointer;}
+    body{font-family:sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);margin:0;padding:1rem;min-height:100vh}
+    .tabs{display:flex;gap:1rem;margin-bottom:1rem}
+    .tabs button{padding:0.5rem 1rem;border:none;background:#004aad;color:white;border-radius:6px;cursor:pointer}
+    .tab-content{display:none}
+    .tab-content.active{display:block}
+    .driver-section{margin-bottom:2rem}
+    .order-card{background:white;border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+    .order-header{display:flex;justify-content:space-between;font-weight:bold;color:#004aad;margin-bottom:0.5rem}
+    textarea,select,input{margin-top:0.3rem;padding:0.4rem;border:1px solid #ccc;border-radius:6px;width:100%}
+    .follow-log{background:#f5f5f5}
+    .comm-log{white-space:pre-line;font-size:0.85rem;color:#555;margin-top:0.3rem}
   </style>
 </head>
 <body>
-  <div class="search-box">
-    <input id="searchInput" type="text" placeholder="Search order or phone" style="flex:1;padding:0.5rem;border-radius:6px;border:1px solid #ccc;" />
-    <button onclick="performSearch()">Search</button>
+  <div class="tabs">
+    <button onclick="showTab('orders')">Orders</button>
+    <button onclick="showTab('payouts')">Payouts</button>
   </div>
-  <div id="results"></div>
+  <div id="orders" class="tab-content active"></div>
+  <div id="payouts" class="tab-content"></div>
 <script>
 const API=window.location.origin.replace(/\/$/,'');
 const headers={'Content-Type':'application/json'};
 const apiGet=p=>fetch(API+p).then(r=>r.json());
 const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(r=>r.json());
 
-function performSearch(){
-  const q=document.getElementById('searchInput').value.trim();
-  if(!q){document.getElementById('results').innerHTML='';return;}
-  apiGet(`/admin/search?q=${encodeURIComponent(q)}`).then(displayResults).catch(()=>{
-    document.getElementById('results').innerHTML='<div>No results</div>';});
+function showTab(t){document.querySelectorAll('.tab-content').forEach(d=>d.classList.remove('active'));document.getElementById(t).classList.add('active');}
+
+async function loadAll(){
+  const drivers=await apiGet('/drivers');
+  loadOrders(drivers);
+  loadPayouts(drivers);
 }
 
-function displayResults(data){
-  const c=document.getElementById('results');
-  if(!Array.isArray(data)||!data.length){c.innerHTML='<div>No results</div>';return;}
-  let h='';
-  data.forEach(o=>{
-    const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
-    const key=`${o.driver}_${o.orderName}`;
-    h+=`<div class="order-card">
-      <div class="order-header">${o.orderName} <span style="font-size:0.9rem;color:#555">(${o.driver})</span></div>
-      <div>${o.customerName||''}</div>
-      <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
-      <div>${o.address||''}</div>
-      <div>Status: <select onchange="updateOrderStatus('${o.driver}','${o.orderName}',this.value)">
-        ${['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'].map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
-      </select></div>
-      <textarea class="notes" placeholder="Notes" onchange="updateOrderNotes('${o.driver}','${o.orderName}',this.value)"></textarea>
-      <div id="comm-${key}" class="comm-log"></div>
-    </div>`;
-  });
-  c.innerHTML=h;
-  data.forEach(o=>displayCommunicationLog(`${o.driver}_${o.orderName}`));
+async function loadOrders(drivers){
+  const container=document.getElementById('orders');
+  container.innerHTML='';
+  for(const d of drivers){
+    const orders=await apiGet(`/orders?driver=${d}`).catch(()=>[]);
+    let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
+    orders.forEach(o=>{
+      const key=`${d}_${o.orderName}`;
+      const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
+      html+=`<div class="order-card">
+        <div class="order-header">${o.orderName}<span style="font-size:0.9rem">${o.deliveryStatus}</span></div>
+        <div>${o.customerName||''}</div>
+        <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
+        <div>${o.address||''}</div>
+        <div>Timestamp: ${o.timestamp}</div>
+        <select onchange="updateOrderStatus('${d}','${o.orderName}',this.value)">
+          ${['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'].map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
+        </select>
+        <input type="datetime-local" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${d}','${o.orderName}',this.value)">
+        <input type="number" value="${o.cashAmount||''}" placeholder="Cash" onchange="updateCash('${d}','${o.orderName}',this.value)">
+        <textarea placeholder="Notes to driver" onchange="updateNotes('${d}','${o.orderName}',this.value)">${o.notes||''}</textarea>
+        <textarea class="follow-log" placeholder="Follow log" onchange="updateFollow('${d}','${o.orderName}',this.value)">${o.followLog||''}</textarea>
+        <div id="comm-${key}" class="comm-log"></div>
+      </div>`;
+    });
+    html+='</div>';
+    container.innerHTML+=html;
+    orders.forEach(o=>displayCommunicationLog(`${d}_${o.orderName}`));
+  }
 }
 
-function updateOrderStatus(driver,order,status){
-  apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:status}).catch(()=>alert('Error updating status'));}
-function updateOrderNotes(driver,order,note){
-  apiPut(`/order/status?driver=${driver}`,{order_name:order,note}).catch(()=>alert('Error updating notes'));}
+async function loadPayouts(drivers){
+  const container=document.getElementById('payouts');
+  container.innerHTML='';
+  for(const d of drivers){
+    const payouts=await apiGet(`/payouts?driver=${d}`).catch(()=>[]);
+    let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
+    payouts.forEach(p=>{
+      html+=`<div class="order-card">
+        <div class="order-header">${p.payoutId}<span>${p.status}</span></div>
+        <div>Date: ${p.dateCreated}</div>
+        <div>Orders: ${p.orders}</div>
+        <div>Total Cash: ${p.totalCash}</div>
+        <div>Total Fees: ${p.totalFees}</div>
+        <div>Net: ${p.totalPayout}</div>
+      </div>`;
+    });
+    html+='</div>';
+    container.innerHTML+=html;
+  }
+}
+
+function updateOrderStatus(driver,order,status){apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:status});}
+function updateNotes(driver,order,note){apiPut(`/order/status?driver=${driver}`,{order_name:order,note});}
+function updateCash(driver,order,cash){apiPut(`/order/status?driver=${driver}`,{order_name:order,cash_amount:parseFloat(cash)||0});}
+function updateScheduledTime(driver,order,time){apiPut(`/order/status?driver=${driver}`,{order_name:order,scheduled_time:time});}
+function updateFollow(driver,order,log){apiPut(`/order/status?driver=${driver}`,{order_name:order,follow_log:log});}
+
 function getCommLog(key){try{return JSON.parse(localStorage.getItem('log_'+key)||'{}');}catch(e){return {};}}
 function saveCommLog(key,log){localStorage.setItem('log_'+key,JSON.stringify(log));}
-function recordCall(key){const log=getCommLog(key);log.calls=log.calls||[];log.calls.push(new Date().toLocaleString());saveCommLog(key,log);const [driver,order]=key.split('_');apiPut(`/order/status?driver=${driver}`,{order_name:order,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
-function recordWhatsapp(key){const log=getCommLog(key);log.whats=log.whats||[];log.whats.push(new Date().toLocaleString());saveCommLog(key,log);const [driver,order]=key.split('_');apiPut(`/order/status?driver=${driver}`,{order_name:order,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
+function recordCall(key){const log=getCommLog(key);log.calls=log.calls||[];log.calls.push(new Date().toLocaleString());saveCommLog(key,log);const [d,o]=key.split('_');apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
+function recordWhatsapp(key){const log=getCommLog(key);log.whats=log.whats||[];log.whats.push(new Date().toLocaleString());saveCommLog(key,log);const [d,o]=key.split('_');apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
 function displayCommunicationLog(key){const log=getCommLog(key);const el=document.getElementById('comm-'+key);if(!el)return;const calls=(log.calls||[]).map(t=>'📞 '+t).join('\n');const whats=(log.whats||[]).map(t=>'💬 '+t).join('\n');el.textContent=[calls,whats].filter(Boolean).join('\n');}
 
-document.getElementById('searchInput').addEventListener('keypress',e=>{if(e.key==='Enter')performSearch();});
+document.addEventListener('DOMContentLoaded',loadAll);
 </script>
 </body>
 </html>
