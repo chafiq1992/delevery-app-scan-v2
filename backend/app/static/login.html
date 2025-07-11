@@ -20,23 +20,29 @@
     <button onclick="login()">Login</button>
   </div>
 
-  <script>
-    const validDrivers = {
-      "abderrehman": true,
-      "anouar": true,
-      "mohammed": true,
-      "nizar": true
-    };
+    <script>
+      let driverIds = new Set();
 
-    function login() {
-      const code = document.getElementById('driverCode').value.trim();
-      if (validDrivers[code]) {
-        localStorage.setItem('driver_id', code);
-        location.href = `/static/index.html?driver=${code}`;
-      } else {
-        alert("Invalid code. Please try again.");
+      document.addEventListener('DOMContentLoaded', () => {
+        fetch('/drivers')
+          .then((res) => res.json())
+          .then((ids) => {
+            driverIds = new Set(ids);
+          })
+          .catch((err) => {
+            console.error('Failed to load driver list', err);
+          });
+      });
+
+      function login() {
+        const code = document.getElementById('driverCode').value.trim();
+        if (driverIds.has(code)) {
+          localStorage.setItem('driver_id', code);
+          location.href = `/static/index.html?driver=${code}`;
+        } else {
+          alert('Invalid code. Please try again.');
+        }
       }
-    }
-  </script>
+    </script>
 </body>
 </html>
