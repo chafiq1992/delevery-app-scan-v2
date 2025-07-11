@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, select
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    DateTime,
+    Text,
+    ForeignKey,
+    select,
+    text,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
 import os
@@ -78,6 +88,16 @@ async def init_db() -> None:
     """Create tables and ensure default drivers exist."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Ensure new columns exist when upgrading without migrations
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='orders' AND column_name='follow_log'"
+            )
+        )
+        if not result.first():
+            await conn.execute(text("ALTER TABLE orders ADD COLUMN follow_log TEXT"))
 
     default_drivers = ["abderrehman", "anouar", "mohammed", "nizar"]
     async with AsyncSessionLocal() as session:
