@@ -794,19 +794,26 @@
         const API = window.location.origin.replace(/\/$/, "");
         const headers = { "Content-Type": "application/json" };
 
-        const apiGet = (p) => fetch(`${API}${p}`).then((r) => r.json());
+        const handleResp = async (r) => {
+          if (!r.ok) {
+            const t = await r.text();
+            throw t || r.status;
+          }
+          return r.json();
+        };
+        const apiGet = (p) => fetch(`${API}${p}`).then(handleResp);
         const apiPost = (p, b = {}) =>
           fetch(`${API}${p}`, {
             method: "POST",
             headers,
             body: JSON.stringify(b),
-          }).then((r) => r.json());
+          }).then(handleResp);
         const apiPut = (p, b = {}) =>
           fetch(`${API}${p}`, {
             method: "PUT",
             headers,
             body: JSON.stringify(b),
-          }).then((r) => r.json());
+          }).then(handleResp);
 
         // 👇 Extract ?driver=driver1 from the URL (after login redirect)
         const urlParams = new URLSearchParams(window.location.search);
@@ -960,12 +967,12 @@
 
         function loadStatsHeader() {
           const { start, end } = computeDefaultDates();
-          apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`).then(
-            (s) => {
+          apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`)
+            .then((s) => {
               if (s && typeof s.deliveryRate === "number")
                 updateDeliveryRateDisplay(s.deliveryRate);
-            },
-          );
+            })
+            .catch((e) => showAlert("Error loading stats: " + e));
         }
 
         /* ─────────────────────────────────────────────────────────────
@@ -1471,7 +1478,7 @@
           apiPut(`/order/status?driver=${driver_id}`, {
             order_name: order,
             comm_log: JSON.stringify(log),
-          }).catch(() => {});
+          }).catch((e) => alert("Error logging call: " + e));
           displayCommunicationLog(order);
           showAlert("Call logged");
           return true;
@@ -1484,7 +1491,7 @@
           apiPut(`/order/status?driver=${driver_id}`, {
             order_name: order,
             comm_log: JSON.stringify(log),
-          }).catch(() => {});
+          }).catch((e) => alert("Error logging message: " + e));
           displayCommunicationLog(order);
           showAlert("WhatsApp logged");
           return true; // let the <a> continue to WhatsApp

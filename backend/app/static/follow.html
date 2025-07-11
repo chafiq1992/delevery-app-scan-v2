@@ -50,8 +50,9 @@
 <script>
 const API=window.location.origin.replace(/\/$/,'');
 const headers={'Content-Type':'application/json'};
-const apiGet=p=>fetch(API+p).then(r=>r.json());
-const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(r=>r.json());
+const handleResp=async r=>{if(!r.ok){const t=await r.text();throw t||r.status;}return r.json();};
+const apiGet=p=>fetch(API+p).then(handleResp);
+const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(handleResp);
 
 const deliveryStatuses=['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
 const statusColors={'Livré':'#4caf50','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336'};
@@ -67,7 +68,12 @@ function showTab(t){
 let ordersData={},followupData={},archiveData={},driversCache=[];
 
 async function loadAll(){
-  driversCache=await apiGet('/drivers');
+  try{
+    driversCache=await apiGet('/drivers');
+  }catch(e){
+    alert('Error loading drivers: '+e);
+    driversCache=[];
+  }
   await loadOrders(driversCache);
   await loadFollowups(driversCache);
   await loadArchive(driversCache);
@@ -78,7 +84,8 @@ async function loadAll(){
 async function loadOrders(drivers){
   ordersData={};
   for(const d of drivers){
-    const orders=await apiGet(`/orders?driver=${d}`).catch(()=>[]);
+    let orders=[];
+    try{orders=await apiGet(`/orders?driver=${d}`);}catch(e){alert(`Error loading orders for ${d}: `+e);}
     ordersData[d]=orders;
   }
   renderOrders();
@@ -87,7 +94,8 @@ async function loadOrders(drivers){
 async function loadFollowups(drivers){
   followupData={};
   for(const d of drivers){
-    const fl=await apiGet(`/orders/followups?driver=${d}`).catch(()=>[]);
+    let fl=[];
+    try{fl=await apiGet(`/orders/followups?driver=${d}`);}catch(e){alert(`Error loading followups for ${d}: `+e);}
     followupData[d]=fl;
   }
   renderFollowups();
@@ -96,7 +104,8 @@ async function loadFollowups(drivers){
 async function loadArchive(drivers){
   archiveData={};
   for(const d of drivers){
-    const ar=await apiGet(`/orders/archive?driver=${d}`).catch(()=>[]);
+    let ar=[];
+    try{ar=await apiGet(`/orders/archive?driver=${d}`);}catch(e){alert(`Error loading archive for ${d}: `+e);}
     archiveData[d]=ar;
   }
   renderArchive();
@@ -166,7 +175,8 @@ async function loadPayouts(drivers){
   const container=document.getElementById('payouts');
   container.innerHTML='';
   for(const d of drivers){
-    const payouts=await apiGet(`/payouts?driver=${d}`).catch(()=>[]);
+    let payouts=[];
+    try{payouts=await apiGet(`/payouts?driver=${d}`);}catch(e){alert(`Error loading payouts for ${d}: `+e);}
     let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
     payouts.forEach(p=>{
       html+=`<div class="order-card">
@@ -183,11 +193,26 @@ async function loadPayouts(drivers){
   }
 }
 
-function updateOrderStatus(driver,order,status){apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:status});}
-function updateNotes(driver,order,note){apiPut(`/order/status?driver=${driver}`,{order_name:order,note});}
-function updateCash(driver,order,cash){apiPut(`/order/status?driver=${driver}`,{order_name:order,cash_amount:parseFloat(cash)||0});}
-function updateScheduledTime(driver,order,time){apiPut(`/order/status?driver=${driver}`,{order_name:order,scheduled_time:time});}
-function updateFollow(driver,order,log){apiPut(`/order/status?driver=${driver}`,{order_name:order,follow_log:log});}
+function updateOrderStatus(driver,order,status){
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:status})
+    .catch(e=>alert('Error updating status: '+e));
+}
+function updateNotes(driver,order,note){
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,note})
+    .catch(e=>alert('Error updating notes: '+e));
+}
+function updateCash(driver,order,cash){
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,cash_amount:parseFloat(cash)||0})
+    .catch(e=>alert('Error updating cash: '+e));
+}
+function updateScheduledTime(driver,order,time){
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,scheduled_time:time})
+    .catch(e=>alert('Error updating schedule: '+e));
+}
+function updateFollow(driver,order,log){
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,follow_log:log})
+    .catch(e=>alert('Error updating follow log: '+e));
+}
 
 function applySearch(){
   renderOrders();
@@ -203,8 +228,18 @@ function applyFilter(){
 
 function getCommLog(key){try{return JSON.parse(localStorage.getItem('log_'+key)||'{}');}catch(e){return {};}}
 function saveCommLog(key,log){localStorage.setItem('log_'+key,JSON.stringify(log));}
-function recordCall(key){const log=getCommLog(key);log.calls=log.calls||[];log.calls.push(new Date().toLocaleString());saveCommLog(key,log);const [d,o]=key.split('_');apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
-function recordWhatsapp(key){const log=getCommLog(key);log.whats=log.whats||[];log.whats.push(new Date().toLocaleString());saveCommLog(key,log);const [d,o]=key.split('_');apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
+function recordCall(key){
+  const log=getCommLog(key);log.calls=log.calls||[];log.calls.push(new Date().toLocaleString());
+  saveCommLog(key,log);const [d,o]=key.split('_');
+  apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)})
+    .catch(e=>alert('Error logging call: '+e));
+  displayCommunicationLog(key);return true;}
+function recordWhatsapp(key){
+  const log=getCommLog(key);log.whats=log.whats||[];log.whats.push(new Date().toLocaleString());
+  saveCommLog(key,log);const [d,o]=key.split('_');
+  apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)})
+    .catch(e=>alert('Error logging message: '+e));
+  displayCommunicationLog(key);return true;}
 function displayCommunicationLog(key){const log=getCommLog(key);const el=document.getElementById('comm-'+key);if(!el)return;const calls=(log.calls||[]).map(t=>'📞 '+t).join('\n');const whats=(log.whats||[]).map(t=>'💬 '+t).join('\n');el.textContent=[calls,whats].filter(Boolean).join('\n');}
 
 document.addEventListener('DOMContentLoaded',loadAll);
