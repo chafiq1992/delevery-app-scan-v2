@@ -27,7 +27,6 @@ from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel
-from starlette.middleware.cors import CORSMiddleware
 
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
