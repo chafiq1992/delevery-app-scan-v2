@@ -83,31 +83,34 @@ async function loadAll(){
 
 async function loadOrders(drivers){
   ordersData={};
-  for(const d of drivers){
-    let orders=[];
-    try{orders=await apiGet(`/orders?driver=${d}`);}catch(e){alert(`Error loading orders for ${d}: `+e);}
-    ordersData[d]=orders;
-  }
+  const results=await Promise.all(drivers.map(d=>
+    apiGet(`/orders?driver=${d}`)
+      .then(data=>({driver:d,data}))
+      .catch(e=>{alert(`Error loading orders for ${d}: `+e);return {driver:d,data:[]};})
+  ));
+  results.forEach(r=>{ordersData[r.driver]=r.data;});
   renderOrders();
 }
 
 async function loadFollowups(drivers){
   followupData={};
-  for(const d of drivers){
-    let fl=[];
-    try{fl=await apiGet(`/orders/followups?driver=${d}`);}catch(e){alert(`Error loading followups for ${d}: `+e);}
-    followupData[d]=fl;
-  }
+  const results=await Promise.all(drivers.map(d=>
+    apiGet(`/orders/followups?driver=${d}`)
+      .then(data=>({driver:d,data}))
+      .catch(e=>{alert(`Error loading followups for ${d}: `+e);return {driver:d,data:[]};})
+  ));
+  results.forEach(r=>{followupData[r.driver]=r.data;});
   renderFollowups();
 }
 
 async function loadArchive(drivers){
   archiveData={};
-  for(const d of drivers){
-    let ar=[];
-    try{ar=await apiGet(`/orders/archive?driver=${d}`);}catch(e){alert(`Error loading archive for ${d}: `+e);}
-    archiveData[d]=ar;
-  }
+  const results=await Promise.all(drivers.map(d=>
+    apiGet(`/orders/archive?driver=${d}`)
+      .then(data=>({driver:d,data}))
+      .catch(e=>{alert(`Error loading archive for ${d}: `+e);return {driver:d,data:[]};})
+  ));
+  results.forEach(r=>{archiveData[r.driver]=r.data;});
   renderArchive();
 }
 
@@ -174,9 +177,13 @@ function renderArchive(){renderSection(archiveData,document.getElementById('arch
 async function loadPayouts(drivers){
   const container=document.getElementById('payouts');
   container.innerHTML='';
-  for(const d of drivers){
-    let payouts=[];
-    try{payouts=await apiGet(`/payouts?driver=${d}`);}catch(e){alert(`Error loading payouts for ${d}: `+e);}
+  const results=await Promise.all(drivers.map(d=>
+    apiGet(`/payouts?driver=${d}`)
+      .then(data=>({driver:d,data}))
+      .catch(e=>{alert(`Error loading payouts for ${d}: `+e);return {driver:d,data:[]};})
+  ));
+  results.forEach(r=>{
+    const d=r.driver;const payouts=r.data;
     let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
     payouts.forEach(p=>{
       html+=`<div class="order-card">
@@ -190,7 +197,7 @@ async function loadPayouts(drivers){
     });
     html+='</div>';
     container.innerHTML+=html;
-  }
+  });
 }
 
 function updateOrderStatus(driver,order,status){
