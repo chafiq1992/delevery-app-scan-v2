@@ -23,7 +23,10 @@
     <button onclick="showTab('orders')">Orders</button>
     <button onclick="showTab('payouts')">Payouts</button>
   </div>
-  <div id="orders" class="tab-content active"></div>
+  <div id="orders" class="tab-content active">
+    <input id="searchInput" type="text" placeholder="Search orders" style="padding:0.4rem;width:100%;margin-bottom:1rem;border:1px solid #ccc;border-radius:6px" oninput="applySearch()">
+    <div id="ordersContainer"></div>
+  </div>
   <div id="payouts" class="tab-content"></div>
 <script>
 const API=window.location.origin.replace(/\/$/,'');
@@ -33,19 +36,37 @@ const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}
 
 function showTab(t){document.querySelectorAll('.tab-content').forEach(d=>d.classList.remove('active'));document.getElementById(t).classList.add('active');}
 
+let ordersData={};
+
 async function loadAll(){
   const drivers=await apiGet('/drivers');
-  loadOrders(drivers);
+  await loadOrders(drivers);
   loadPayouts(drivers);
 }
 
 async function loadOrders(drivers){
-  const container=document.getElementById('orders');
-  container.innerHTML='';
+  ordersData={};
   for(const d of drivers){
     const orders=await apiGet(`/orders?driver=${d}`).catch(()=>[]);
+    ordersData[d]=orders;
+  }
+  renderOrders();
+}
+
+function renderOrders(){
+  const filter=(document.getElementById('searchInput').value||'').toLowerCase();
+  const container=document.getElementById('ordersContainer');
+  container.innerHTML='';
+  for(const [d,orders] of Object.entries(ordersData)){
+    const filtered=orders.filter(o=>{
+      const phone=(o.customerPhone||'').toLowerCase();
+      const name=(o.customerName||'').toLowerCase();
+      const order=o.orderName.toLowerCase();
+      return !filter||order.includes(filter)||phone.includes(filter)||name.includes(filter);
+    });
+    if(!filtered.length) continue;
     let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
-    orders.forEach(o=>{
+    filtered.forEach(o=>{
       const key=`${d}_${o.orderName}`;
       const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
       html+=`<div class="order-card">
@@ -54,6 +75,7 @@ async function loadOrders(drivers){
         <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
         <div>${o.address||''}</div>
         <div>Timestamp: ${o.timestamp}</div>
+        ${o.notes?`<div class="driver-notes">Driver: ${o.notes}</div>`:''}
         <select onchange="updateOrderStatus('${d}','${o.orderName}',this.value)">
           ${['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'].map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
         </select>
@@ -66,7 +88,7 @@ async function loadOrders(drivers){
     });
     html+='</div>';
     container.innerHTML+=html;
-    orders.forEach(o=>displayCommunicationLog(`${d}_${o.orderName}`));
+    filtered.forEach(o=>displayCommunicationLog(`${d}_${o.orderName}`));
   }
 }
 
@@ -96,6 +118,10 @@ function updateNotes(driver,order,note){apiPut(`/order/status?driver=${driver}`,
 function updateCash(driver,order,cash){apiPut(`/order/status?driver=${driver}`,{order_name:order,cash_amount:parseFloat(cash)||0});}
 function updateScheduledTime(driver,order,time){apiPut(`/order/status?driver=${driver}`,{order_name:order,scheduled_time:time});}
 function updateFollow(driver,order,log){apiPut(`/order/status?driver=${driver}`,{order_name:order,follow_log:log});}
+
+function applySearch(){
+  renderOrders();
+}
 
 function getCommLog(key){try{return JSON.parse(localStorage.getItem('log_'+key)||'{}');}catch(e){return {};}}
 function saveCommLog(key,log){localStorage.setItem('log_'+key,JSON.stringify(log));}
