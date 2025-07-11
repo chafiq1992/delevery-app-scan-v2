@@ -45,6 +45,7 @@ class Order(Base):
     store = Column(String)
     delivery_status = Column(String)
     notes = Column(Text)
+    driver_notes = Column(Text)
     scheduled_time = Column(String)
     scan_date = Column(String)
     cash_amount = Column(Float)
@@ -98,6 +99,15 @@ async def init_db() -> None:
         )
         if not result.first():
             await conn.execute(text("ALTER TABLE orders ADD COLUMN follow_log TEXT"))
+
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='orders' AND column_name='driver_notes'"
+            )
+        )
+        if not result.first():
+            await conn.execute(text("ALTER TABLE orders ADD COLUMN driver_notes TEXT"))
 
     default_drivers = ["abderrehman", "anouar", "mohammed", "nizar"]
     async with AsyncSessionLocal() as session:
