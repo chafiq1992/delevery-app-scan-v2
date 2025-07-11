@@ -137,7 +137,6 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 # shorter TTLs for near real-time updates
 orders_cache = TTLCache(maxsize=8, ttl=60)
 payouts_cache = TTLCache(maxsize=8, ttl=60)
-orders_data_cache = TTLCache(maxsize=8, ttl=60)
 archive_cache = TTLCache(maxsize=8, ttl=60)
 followups_cache = TTLCache(maxsize=8, ttl=60)
 
