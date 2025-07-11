@@ -5,13 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Follow Agent</title>
   <style>
-    body{font-family:sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);margin:0;padding:1rem;min-height:100vh}
+    :root{--bg:#f5f7fa;--text:#333;--card:#fff}
+    body{font-family:sans-serif;background:var(--bg);color:var(--text);margin:0;padding:1rem;min-height:100vh}
+    body.dark{--bg:#121212;--text:#eee;--card:#1e1e1e}
     .tabs{display:flex;gap:1rem;margin-bottom:1rem}
     .tabs button{padding:0.5rem 1rem;border:none;background:#004aad;color:white;border-radius:6px;cursor:pointer}
     .tab-content{display:none}
     .tab-content.active{display:block}
     .driver-section{margin-bottom:2rem}
-    .order-card{background:white;border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+    .order-card{background:var(--card);border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+    .order-card.flash{animation:flash 1s}
+    @keyframes flash{0%{background:yellow;}100%{background:var(--card);}}
     .order-header{display:flex;justify-content:space-between;font-weight:bold;color:#004aad;margin-bottom:0.5rem}
     textarea,select,input{margin-top:0.3rem;padding:0.4rem;border:1px solid #ccc;border-radius:6px;width:100%}
     .follow-log{background:#f5f5f5}
@@ -28,9 +32,14 @@
     .tag-oscario{background:#40e0d0;color:#333}
     .tag-sand{background:#ffcc80;color:#333}
     .tag-ch{background:#ffab91;color:#333}
+    .filters{position:sticky;top:0;background:var(--bg);padding-bottom:0.5rem;z-index:100}
+    .driver-log{background:#f5f5f5;padding:0.4rem;border-radius:6px;margin-top:0.3rem}
+    .driver-log .log-item{display:flex;gap:0.3rem;align-items:center;font-size:0.85rem}
+    .driver-log .log-time{color:#666}
   </style>
 </head>
 <body>
+  <button onclick="toggleDark()" style="position:fixed;top:5px;right:5px;z-index:200">🌓</button>
   <div class="tabs">
     <button onclick="showTab('orders')">Orders</button>
     <button onclick="showTab('followups')">Follow Ups</button>
@@ -38,10 +47,12 @@
     <button onclick="showTab('payouts')">Payouts</button>
   </div>
   <div id="orders" class="tab-content active">
-    <input id="searchInput" type="text" placeholder="Search orders" style="padding:0.4rem;width:100%;margin-bottom:0.5rem;border:1px solid #ccc;border-radius:6px" oninput="applySearch()">
-    <select id="statusFilter" style="margin-bottom:1rem" onchange="applyFilter()">
-      <option value="">All Statuses</option>
-    </select>
+    <div class="filters">
+      <input id="searchInput" type="text" placeholder="Search orders" style="padding:0.4rem;width:100%;margin-bottom:0.5rem;border:1px solid #ccc;border-radius:6px" oninput="applySearch()">
+      <select id="statusFilter" style="margin-bottom:1rem" onchange="applyFilter()">
+        <option value="">All Statuses</option>
+      </select>
+    </div>
     <div id="ordersContainer"></div>
   </div>
   <div id="followups" class="tab-content"></div>
@@ -55,7 +66,9 @@ const apiGet=p=>fetch(API+p).then(handleResp);
 const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(handleResp);
 
 const deliveryStatuses=['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
-const statusColors={'Livré':'#4caf50','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336'};
+const statusColors={'Livré':'#4caf50','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336','En cours':'#ffeb3b'};
+
+let prevState={};
 
 function showTab(t){
   document.querySelectorAll('.tab-content').forEach(d=>d.classList.remove('active'));
@@ -79,17 +92,35 @@ async function loadAll(){
   await loadArchive(driversCache);
   loadPayouts(driversCache);
   populateStatusFilter();
+  setInterval(()=>{
+    loadOrders(driversCache);
+    loadFollowups(driversCache);
+    loadArchive(driversCache);
+    loadPayouts(driversCache);
+  },30000);
 }
 
 async function loadOrders(drivers){
   ordersData={};
+  const changed=[];
   const results=await Promise.all(drivers.map(d=>
     apiGet(`/orders?driver=${d}`)
       .then(data=>({driver:d,data}))
       .catch(e=>{alert(`Error loading orders for ${d}: `+e);return {driver:d,data:[]};})
   ));
-  results.forEach(r=>{ordersData[r.driver]=r.data;});
+  results.forEach(r=>{
+    ordersData[r.driver]=r.data;
+    r.data.forEach(o=>{
+      const key=`${r.driver}_${o.orderName}`;
+      const prev=prevState[key]||{};
+      if(prev.status!==o.deliveryStatus||prev.notes!==o.driverNotes){
+        changed.push(key);
+      }
+      prevState[key]={status:o.deliveryStatus,notes:o.driverNotes};
+    });
+  });
   renderOrders();
+  changed.forEach(k=>flashCard(k));
 }
 
 async function loadFollowups(drivers){
@@ -140,20 +171,20 @@ function renderSection(dataObj,container,includeInputs){
     });
     if(!filtered.length) continue;
     let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
-    filtered.forEach(o=>{
+  filtered.forEach(o=>{
       const key=`${d}_${o.orderName}`;
       const border=statusColors[o.deliveryStatus]||'#004aad';
       const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
-      html+=`<div class="order-card ${o.urgent?'followup':''}" style="border-left-color:${border}">
-        <div class="order-header">${o.orderName}${o.urgent?'<span class="urgent-icon">🔔</span>':''}<span style="font-size:0.9rem">${o.deliveryStatus}</span></div>
+      html+=`<div id="card-${key}" class="order-card ${o.urgent?'followup':''}" style="border-left-color:${border}">
+        <div class="order-header"><span style="font-size:1.2rem;font-weight:bold">${o.orderName}</span>${o.urgent?'<span class="urgent-icon">🔔</span>':''}<span style="font-size:0.9rem">${o.deliveryStatus}</span></div>
         <div>${o.customerName||''}</div>
         <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
         <div>${o.address||''}</div>
         <div>Timestamp: ${o.timestamp}</div>
-        ${o.driverNotes?`<div class="driver-notes">Driver:<br>${o.driverNotes.replace(/\n/g,'<br>')}</div>`:''}`;
+        ${o.driverNotes?`<div class="driver-log">${formatDriverNotes(o.driverNotes)}</div>`:''}`;
       if(includeInputs){
         html+=`<select class="status-select" onchange="updateOrderStatus('${d}','${o.orderName}',this.value)">`+
-        deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')+
+        deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''} style="background:${statusColors[s]||'#fff'}">${s}</option>`).join('')+
         `</select>`+
         `<input type="datetime-local" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${d}','${o.orderName}',this.value)">`+
         `<input type="number" value="${o.cashAmount||''}" placeholder="Cash" onchange="updateCash('${d}','${o.orderName}',this.value)">`+
@@ -248,6 +279,21 @@ function recordWhatsapp(key){
     .catch(e=>alert('Error logging message: '+e));
   displayCommunicationLog(key);return true;}
 function displayCommunicationLog(key){const log=getCommLog(key);const el=document.getElementById('comm-'+key);if(!el)return;const calls=(log.calls||[]).map(t=>'📞 '+t).join('\n');const whats=(log.whats||[]).map(t=>'💬 '+t).join('\n');el.textContent=[calls,whats].filter(Boolean).join('\n');}
+
+function formatDriverNotes(notes){
+  return notes.split('\n').filter(Boolean).map(l=>{
+    const idx=l.indexOf(' - ');
+    const ts=idx>0?l.slice(0,idx):'';
+    const msg=idx>0?l.slice(idx+3):l;
+    return `<div class="log-item">🧾 <span class="log-time">${ts}</span> <span>${msg}</span></div>`;
+  }).join('');
+}
+
+function flashCard(id){
+  const el=document.getElementById('card-'+id);if(!el)return;el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1000);
+}
+
+function toggleDark(){document.body.classList.toggle('dark');}
 
 document.addEventListener('DOMContentLoaded',loadAll);
 </script>
