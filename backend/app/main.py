@@ -135,6 +135,12 @@ async def show_login():
 async def show_admin_login():
     return FileResponse(os.path.join(STATIC_DIR, "admin_login.html"))
 
+
+@app.get("/follow", response_class=HTMLResponse)
+async def show_follow_login():
+    """Serve login page for follow agents."""
+    return FileResponse(os.path.join(STATIC_DIR, "follow_login.html"))
+
 @app.post("/login", response_class=HTMLResponse)
 async def login(driver_id: str = Form(...)):
     async for session in get_session():
@@ -150,6 +156,14 @@ async def admin_login(password: str = Form(...)):
     if password == ADMIN_PASSWORD:
         return {"success": True}
     raise HTTPException(status_code=401, detail="Invalid admin password")
+
+
+@app.post("/follow/login")
+async def follow_login(password: str = Form(...)):
+    """Authenticate follow agents using the admin password for now."""
+    if password == ADMIN_PASSWORD:
+        return {"success": True}
+    raise HTTPException(status_code=401, detail="Invalid follow password")
 
 @app.get("/drivers")
 async def list_drivers():

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Follow Agent</title>
+  <style>
+    body{font-family:sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);min-height:100vh;margin:0;padding:1rem;}
+    .search-box{display:flex;justify-content:center;margin-bottom:1rem;gap:0.5rem;}
+    .order-card{background:white;border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+    .order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;font-weight:bold;color:#004aad;}
+    .notes{width:100%;margin-top:0.5rem;padding:0.5rem;border-radius:6px;border:1px solid #ccc;}
+    .comm-log{font-size:0.85rem;color:#444;margin-top:0.3rem;white-space:pre-line;}
+    select{padding:0.4rem;border-radius:6px;}
+    button{padding:0.5rem 1rem;background:#004aad;color:white;border:none;border-radius:6px;cursor:pointer;}
+  </style>
+</head>
+<body>
+  <div class="search-box">
+    <input id="searchInput" type="text" placeholder="Search order or phone" style="flex:1;padding:0.5rem;border-radius:6px;border:1px solid #ccc;" />
+    <button onclick="performSearch()">Search</button>
+  </div>
+  <div id="results"></div>
+<script>
+const API=window.location.origin.replace(/\/$/,'');
+const headers={'Content-Type':'application/json'};
+const apiGet=p=>fetch(API+p).then(r=>r.json());
+const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(r=>r.json());
+
+function performSearch(){
+  const q=document.getElementById('searchInput').value.trim();
+  if(!q){document.getElementById('results').innerHTML='';return;}
+  apiGet(`/admin/search?q=${encodeURIComponent(q)}`).then(displayResults).catch(()=>{
+    document.getElementById('results').innerHTML='<div>No results</div>';});
+}
+
+function displayResults(data){
+  const c=document.getElementById('results');
+  if(!Array.isArray(data)||!data.length){c.innerHTML='<div>No results</div>';return;}
+  let h='';
+  data.forEach(o=>{
+    const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
+    const key=`${o.driver}_${o.orderName}`;
+    h+=`<div class="order-card">
+      <div class="order-header">${o.orderName} <span style="font-size:0.9rem;color:#555">(${o.driver})</span></div>
+      <div>${o.customerName||''}</div>
+      <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
+      <div>${o.address||''}</div>
+      <div>Status: <select onchange="updateOrderStatus('${o.driver}','${o.orderName}',this.value)">
+        ${['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'].map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
+      </select></div>
+      <textarea class="notes" placeholder="Notes" onchange="updateOrderNotes('${o.driver}','${o.orderName}',this.value)"></textarea>
+      <div id="comm-${key}" class="comm-log"></div>
+    </div>`;
+  });
+  c.innerHTML=h;
+  data.forEach(o=>displayCommunicationLog(`${o.driver}_${o.orderName}`));
+}
+
+function updateOrderStatus(driver,order,status){
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:status}).catch(()=>alert('Error updating status'));}
+function updateOrderNotes(driver,order,note){
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,note}).catch(()=>alert('Error updating notes'));}
+function getCommLog(key){try{return JSON.parse(localStorage.getItem('log_'+key)||'{}');}catch(e){return {};}}
+function saveCommLog(key,log){localStorage.setItem('log_'+key,JSON.stringify(log));}
+function recordCall(key){const log=getCommLog(key);log.calls=log.calls||[];log.calls.push(new Date().toLocaleString());saveCommLog(key,log);const [driver,order]=key.split('_');apiPut(`/order/status?driver=${driver}`,{order_name:order,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
+function recordWhatsapp(key){const log=getCommLog(key);log.whats=log.whats||[];log.whats.push(new Date().toLocaleString());saveCommLog(key,log);const [driver,order]=key.split('_');apiPut(`/order/status?driver=${driver}`,{order_name:order,comm_log:JSON.stringify(log)});displayCommunicationLog(key);return true;}
+function displayCommunicationLog(key){const log=getCommLog(key);const el=document.getElementById('comm-'+key);if(!el)return;const calls=(log.calls||[]).map(t=>'📞 '+t).join('\n');const whats=(log.whats||[]).map(t=>'💬 '+t).join('\n');el.textContent=[calls,whats].filter(Boolean).join('\n');}
+
+document.getElementById('searchInput').addEventListener('keypress',e=>{if(e.key==='Enter')performSearch();});
+</script>
+</body>
+</html>
