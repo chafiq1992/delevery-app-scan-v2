@@ -1,1511 +1,612 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta charset="UTF-8" />
-    <title>Delivery Management</title>
-    <link rel="icon" type="image/png" href="favicon.png" />
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial,
-          sans-serif;
-        background: linear-gradient(to bottom, #f5f7fa, #e2e8f0);
-        color: #333;
-        line-height: 1.6;
-        min-height: 100vh;
-        overflow-x: hidden;
-        scroll-behavior: smooth;
-      }
-      .top-header {
-        background: white;
-        text-align: center;
-        padding: 0.5rem 1rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-      }
-      .main-header {
-        background: linear-gradient(135deg, #004aad, #0066cc);
-        color: white;
-        padding: 1rem;
-        text-align: center;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-      }
-      .logo-icon {
-        width: 120px;
-        height: auto;
-        margin: 0 auto;
-        display: block;
-      }
-      .driver-info {
-        margin-top: 0.3rem;
-        font-weight: 600;
-        display: flex;
-        justify-content: center;
-        gap: 0.5rem;
-        align-items: center;
-      }
-      .driver-name {
-        font-size: 1.2rem;
-        text-transform: uppercase;
-      }
-      .current-time {
-        font-size: 1rem;
-      }
-      .delivery-rate {
-        font-size: 1rem;
-        font-weight: bold;
-      }
-      .nav-tabs {
-        display: flex;
-        background: white;
-        border-bottom: 2px solid #e1e8ed;
-        position: sticky;
-        top: 0;
-        z-index: 100;
-      }
-      .nav-tab {
-        flex: 1;
-        padding: 1rem;
-        text-align: center;
-        cursor: pointer;
-        border: none;
-        background: white;
-        font-size: 1rem;
-        font-weight: 600;
-        color: #666;
-        transition: all 0.3s ease;
-      }
-      .nav-tab.active {
-        color: #004aad;
-        border-bottom: 3px solid #004aad;
-        background: #f8faff;
-      }
-      .tab-content {
-        display: none;
-        padding: 1.5rem;
-        max-width: 1000px;
-        margin: 0 auto;
-      }
-      .tab-content.active {
-        display: block;
-      }
-      #reader {
-        width: 100%;
-        max-width: 400px;
-        margin: 0 auto 1.5rem auto;
-        border-radius: 15px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        background: white;
-        padding: 15px;
-        display: none;
-      }
-      #result {
-        margin: 1.5rem 0;
-        font-size: 1.2rem;
-        color: #004aad;
-        min-height: 2em;
-        text-align: center;
-        font-weight: 600;
-      }
-      .scan-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 1rem 2rem;
-        font-size: 1.2rem;
-        font-weight: bold;
-        background: linear-gradient(135deg, #004aad, #0066cc);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0, 74, 173, 0.3);
-        transition: all 0.3s ease;
-        gap: 0.5em;
-        margin: 0 auto;
-        display: block;
-        width: fit-content;
-      }
-      .scan-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 74, 173, 0.4);
-      }
-      .orders-container {
-        display: grid;
-        gap: 1rem;
-      }
-      .order-card {
-        background: white;
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        border-left: 4px solid #004aad;
-        transition: all 0.3s ease;
-      }
-      .order-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-      }
-      .order-card.delivered {
-        border-left-color: #4caf50;
-      }
-      .order-card.followup {
-        border-left-color: #f44336;
-      }
-      .alert-box {
-        position: fixed;
-        top: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #ffeb3b;
-        color: #333;
-        padding: 0.5rem 1rem;
-        border-radius: 0 0 8px 8px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-        z-index: 200;
-        display: none;
-      }
-      .status-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 3rem;
-        color: white;
-        background: rgba(0, 0, 0, 0.6);
-        border-radius: 12px;
-        pointer-events: none;
-        animation: fadeOut 1s forwards;
-      }
-      @keyframes fadeOut {
-        0% {
-          opacity: 1;
-        }
-        100% {
-          opacity: 0;
-        }
-      }
-      .slide-right {
-        animation: slideRight 0.5s forwards;
-      }
-      .slide-left {
-        animation: slideLeft 0.5s forwards;
-      }
-      @keyframes slideRight {
-        to {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-      }
-      @keyframes slideLeft {
-        to {
-          transform: translateX(-100%);
-          opacity: 0;
-        }
-      }
-      .order-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-      .order-name {
-        font-size: 1.3rem;
-        font-weight: bold;
-        color: #004aad;
-      }
-      .scan-date {
-        background: #e3f2fd;
-        color: #1976d2;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-size: 0.9rem;
-        font-weight: 600;
-      }
-      .customer-info {
-        margin-bottom: 1rem;
-      }
-      .customer-name {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 0.3rem;
-      }
-      .customer-phone {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-      }
-      .phone-btn {
-        background: #25d366;
-        color: white;
-        border: none;
-        padding: 0.5rem;
-        border-radius: 50%;
-        cursor: pointer;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 35px;
-        height: 35px;
-      }
-      .phone-btn:hover {
-        background: #128c7e;
-        transform: scale(1.1);
-      }
-      .wa-btn {
-        background: #25d366;
-        color: white;
-        border: none;
-        padding: 0.5rem;
-        border-radius: 50%;
-        cursor: pointer;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 35px;
-        height: 35px;
-      }
-      .wa-btn:hover {
-        background: #128c7e;
-        transform: scale(1.1);
-      }
-      .address {
-        color: #666;
-        font-size: 0.95rem;
-        line-height: 1.4;
-      }
-      .comm-log {
-        font-size: 0.85rem;
-        color: #555;
-        margin-top: 0.3rem;
-        white-space: pre-line;
-      }
-      .order-details {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-        margin: 1rem 0;
-        padding: 1rem;
-        background: #f8faff;
-        border-radius: 8px;
-      }
-      .detail-item {
-        display: flex;
-        flex-direction: column;
-      }
-      .detail-label {
-        font-size: 0.9rem;
-        color: #666;
-        margin-bottom: 0.2rem;
-      }
-      .detail-value {
-        font-weight: 600;
-        color: #333;
-      }
-      .cash-input {
-        padding: 0.5rem;
-        border: 2px solid #ddd;
-        border-radius: 6px;
-        font-size: 1rem;
-        width: 100%;
-        transition: border-color 0.3s ease;
-      }
-      .cash-input:focus {
-        outline: none;
-        border-color: #004aad;
-      }
-      .fee-display {
-        color: #4caf50;
-        font-weight: bold;
-        font-size: 1.1rem;
-      }
-      .fee-exchange {
-        color: #ff9800;
-      }
-      .status-section {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        margin-top: 1rem;
-        flex-wrap: wrap;
-      }
-      .status-select {
-        padding: 0.5rem 1rem;
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        font-size: 1rem;
-        background: white;
-        cursor: pointer;
-        transition: border-color 0.3s ease;
-        min-width: 150px;
-      }
-      .status-select:focus {
-        outline: none;
-        border-color: #004aad;
-      }
-      .notes-section {
-        margin-top: 1rem;
-      }
-      .notes-input {
-        width: 100%;
-        padding: 0.8rem;
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        font-size: 1rem;
-        resize: vertical;
-        min-height: 80px;
-        transition: border-color 0.3s ease;
-      }
-      .notes-input:focus {
-        outline: none;
-        border-color: #004aad;
-      }
-      .status-log {
-        font-size: 0.85rem;
-        color: #444;
-        margin-top: 0.5rem;
-        white-space: pre-line;
-      }
-      .loading,
-      .no-orders {
-        text-align: center;
-        padding: 2rem;
-        color: #666;
-        font-size: 1.1rem;
-      }
-      .no-orders {
-        color: #999;
-        font-size: 1.2rem;
-        padding: 3rem;
-      }
-      .error-message {
-        text-align: center;
-        padding: 2rem;
-        color: #d32f2f;
-        font-size: 1.1rem;
-        background: #ffebee;
-        border-radius: 8px;
-        margin: 1rem 0;
-      }
-      .tag-badge {
-        display: inline-block;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-        margin-top: 0.5rem;
-      }
-      .tag-k {
-        background: #ffc0cb;
-        color: #333;
-      }
-      .tag-big {
-        background: #fff176;
-        color: #333;
-      }
-      .tag-12livery,
-      .tag-12livrey {
-        background: #a5d6a7;
-        color: #333;
-      }
-      .tag-fast {
-        background: #90caf9;
-        color: #333;
-      }
-      .tag-oscario {
-        background: #40e0d0;
-        color: #333;
-      }
-      .tag-sand {
-        background: #ffcc80;
-        color: #333;
-      }
-      .tag-ch {
-        background: #ffab91;
-        color: #333;
-      }
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <title>Delivery Management</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);color:#333;line-height:1.6;min-height:100vh;overflow-x:hidden;scroll-behavior:smooth}
+    .top-header{background:white;text-align:center;padding:0.5rem 1rem;box-shadow:0 2px 4px rgba(0,0,0,0.05)}
+    .main-header{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1rem;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
+    .logo-icon{width:120px;height:auto;margin:0 auto;display:block}
+    .driver-info{margin-top:0.3rem;font-weight:600;display:flex;justify-content:center;gap:0.5rem;align-items:center}
+    .driver-name{font-size:1.2rem;text-transform:uppercase}
+    .current-time{font-size:1rem}
+    .delivery-rate{font-size:1rem;font-weight:bold}
+    .nav-tabs{display:flex;background:white;border-bottom:2px solid #e1e8ed;position:sticky;top:0;z-index:100}
+    .nav-tab{flex:1;padding:1rem;text-align:center;cursor:pointer;border:none;background:white;font-size:1rem;font-weight:600;color:#666;transition:all 0.3s ease}
+    .nav-tab.active{color:#004aad;border-bottom:3px solid #004aad;background:#f8faff}
+    .tab-content{display:none;padding:1.5rem;max-width:1000px;margin:0 auto}
+    .tab-content.active{display:block}
+    #reader{width:100%;max-width:400px;margin:0 auto 1.5rem auto;border-radius:15px;box-shadow:0 4px 20px rgba(0,0,0,0.1);background:white;padding:15px;display:none}
+    #result{margin:1.5rem 0;font-size:1.2rem;color:#004aad;min-height:2em;text-align:center;font-weight:600}
+    .scan-btn{display:inline-flex;align-items:center;justify-content:center;padding:1rem 2rem;font-size:1.2rem;font-weight:bold;background:linear-gradient(135deg,#004aad,#0066cc);color:white;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 15px rgba(0,74,173,0.3);transition:all 0.3s ease;gap:0.5em;margin:0 auto;display:block;width:fit-content}
+    .scan-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,74,173,0.4)}
+    .orders-container{display:grid;gap:1rem}
+    .order-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-left:4px solid #004aad;transition:all 0.3s ease}
+    .order-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,0.15)}
+    .order-card.delivered{border-left-color:#4caf50}
+    .status-overlay{position:absolute;top:0;left:0;right:0;bottom:0;
+      display:flex;align-items:center;justify-content:center;
+      font-size:3rem;color:white;background:rgba(0,0,0,0.6);
+      border-radius:12px;pointer-events:none;animation:fadeOut 1s forwards;
+    }
+    @keyframes fadeOut{0%{opacity:1;}100%{opacity:0;}}
+    .slide-right{animation:slideRight 0.5s forwards;}
+    .slide-left{animation:slideLeft 0.5s forwards;}
+    @keyframes slideRight{to{transform:translateX(100%);opacity:0;}}
+    @keyframes slideLeft{to{transform:translateX(-100%);opacity:0;}}
+    .order-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem}
+    .order-name{font-size:1.3rem;font-weight:bold;color:#004aad}
+    .scan-date{background:#e3f2fd;color:#1976d2;padding:0.3rem 0.8rem;border-radius:20px;font-size:0.9rem;font-weight:600}
+    .customer-info{margin-bottom:1rem}
+    .customer-name{font-size:1.1rem;font-weight:600;color:#333;margin-bottom:0.3rem}
+    .customer-phone{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem}
+    .phone-btn{background:#25d366;color:white;border:none;padding:0.5rem;border-radius:50%;cursor:pointer;font-size:1rem;transition:all 0.3s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:35px;height:35px}
+    .phone-btn:hover{background:#128c7e;transform:scale(1.1)}
+    .wa-btn{background:#25d366;color:white;border:none;padding:0.5rem;border-radius:50%;cursor:pointer;font-size:1rem;transition:all 0.3s ease;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:35px;height:35px}
+    .wa-btn:hover{background:#128c7e;transform:scale(1.1)}
+    .address{color:#666;font-size:0.95rem;line-height:1.4}
+    .comm-log{font-size:0.85rem;color:#555;margin-top:0.3rem;white-space:pre-line}
+    .order-details{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0;padding:1rem;background:#f8faff;border-radius:8px}
+    .detail-item{display:flex;flex-direction:column}
+    .detail-label{font-size:0.9rem;color:#666;margin-bottom:0.2rem}
+    .detail-value{font-weight:600;color:#333}
+    .cash-input{padding:0.5rem;border:2px solid #ddd;border-radius:6px;font-size:1rem;width:100%;transition:border-color 0.3s ease}
+    .cash-input:focus{outline:none;border-color:#004aad}
+    .fee-display{color:#4caf50;font-weight:bold;font-size:1.1rem}
+    .fee-exchange{color:#ff9800}
+    .status-section{display:flex;gap:1rem;align-items:center;margin-top:1rem;flex-wrap:wrap}
+    .status-select{padding:0.5rem 1rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;background:white;cursor:pointer;transition:border-color 0.3s ease;min-width:150px}
+    .status-select:focus{outline:none;border-color:#004aad}
+    .notes-section{margin-top:1rem}
+    .notes-input{width:100%;padding:0.8rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;resize:vertical;min-height:80px;transition:border-color 0.3s ease}
+    .notes-input:focus{outline:none;border-color:#004aad}
+    .status-log{font-size:0.85rem;color:#444;margin-top:0.5rem;white-space:pre-line}
+    .loading,.no-orders{text-align:center;padding:2rem;color:#666;font-size:1.1rem}
+    .no-orders{color:#999;font-size:1.2rem;padding:3rem}
+    .error-message{text-align:center;padding:2rem;color:#d32f2f;font-size:1.1rem;background:#ffebee;border-radius:8px;margin:1rem 0}
+    .tag-badge{display:inline-block;padding:0.3rem 0.8rem;border-radius:20px;font-size:0.85rem;font-weight:600;margin-top:0.5rem}
+    .tag-k{background:#ffc0cb;color:#333}
+    .tag-big{background:#fff176;color:#333}
+    .tag-12livery,.tag-12livrey{background:#a5d6a7;color:#333}
+    .tag-fast{background:#90caf9;color:#333}
+    .tag-oscario{background:#40e0d0;color:#333}
+    .tag-sand{background:#ffcc80;color:#333}
+    .tag-ch{background:#ffab91;color:#333}
+    
+    /* Payout Management Styles */
+    .payout-container{display:grid;gap:1.5rem}
+    .order-summary{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1.5rem;border-radius:12px;box-shadow:0 4px 20px rgba(0,74,173,0.3);margin-bottom:1.5rem}
+    .payout-summary{background:linear-gradient(135deg,#4caf50,#66bb6a);color:white;padding:2rem;border-radius:12px;box-shadow:0 4px 20px rgba(76,175,80,0.3);margin-bottom:2rem}
+    .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+    .summary-item{text-align:center}
+    .summary-label{font-size:0.9rem;opacity:0.9;margin-bottom:0.5rem}
+    .summary-value{font-size:2rem;font-weight:bold}
+    .payout-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-left:4px solid #4caf50}
+    .payout-card.paid{border-left-color:#2196f3;opacity:0.8}
+    .payout-header{display:flex;justify-content:between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:1rem}
+    .payout-period{font-size:1.2rem;font-weight:bold;color:#4caf50}
+    .payout-status{padding:0.3rem 1rem;border-radius:20px;font-size:0.9rem;font-weight:600}
+    .status-pending{background:#fff3e0;color:#f57c00}
+    .status-paid{background:#e8f5e8;color:#2e7d32}
+    .payout-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin:1rem 0;padding:1rem;background:#f8faff;border-radius:8px}
+    .payout-orders{margin-top:1rem}
+    .payout-order-item{display:flex;justify-content:space-between;align-items:center;padding:0.5rem;background:#f5f5f5;border-radius:6px;margin-bottom:0.5rem}
+    .mark-paid-btn{background:#2196f3;color:white;border:none;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;font-weight:600;transition:all 0.3s ease}
+    .mark-paid-btn:hover{background:#1976d2;transform:translateY(-1px)}
+    .mark-paid-btn:disabled{background:#ccc;cursor:not-allowed;transform:none}
 
-      /* Payout Management Styles */
-      .payout-container {
-        display: grid;
-        gap: 1.5rem;
-      }
-      .order-summary {
-        background: linear-gradient(135deg, #004aad, #0066cc);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(0, 74, 173, 0.3);
-        margin-bottom: 1.5rem;
-      }
-      .payout-summary {
-        background: linear-gradient(135deg, #4caf50, #66bb6a);
-        color: white;
-        padding: 2rem;
-        border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(76, 175, 80, 0.3);
-        margin-bottom: 2rem;
-      }
-      .summary-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-      }
-      .summary-item {
-        text-align: center;
-      }
-      .summary-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-        margin-bottom: 0.5rem;
-      }
-      .summary-value {
-        font-size: 2rem;
-        font-weight: bold;
-      }
-      .payout-card {
-        background: white;
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        border-left: 4px solid #4caf50;
-      }
-      .payout-card.paid {
-        border-left-color: #2196f3;
-        opacity: 0.8;
-      }
-      .payout-header {
-        display: flex;
-        justify-content: between;
-        align-items: center;
-        margin-bottom: 1rem;
-        flex-wrap: wrap;
-        gap: 1rem;
-      }
-      .payout-period {
-        font-size: 1.2rem;
-        font-weight: bold;
-        color: #4caf50;
-      }
-      .payout-status {
-        padding: 0.3rem 1rem;
-        border-radius: 20px;
-        font-size: 0.9rem;
-        font-weight: 600;
-      }
-      .status-pending {
-        background: #fff3e0;
-        color: #f57c00;
-      }
-      .status-paid {
-        background: #e8f5e8;
-        color: #2e7d32;
-      }
-      .payout-details {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
-        margin: 1rem 0;
-        padding: 1rem;
-        background: #f8faff;
-        border-radius: 8px;
-      }
-      .payout-orders {
-        margin-top: 1rem;
-      }
-      .payout-order-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.5rem;
-        background: #f5f5f5;
-        border-radius: 6px;
-        margin-bottom: 0.5rem;
-      }
-      .mark-paid-btn {
-        background: #2196f3;
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 600;
-        transition: all 0.3s ease;
-      }
-      .mark-paid-btn:hover {
-        background: #1976d2;
-        transform: translateY(-1px);
-      }
-      .mark-paid-btn:disabled {
-        background: #ccc;
-        cursor: not-allowed;
-        transform: none;
-      }
+    .schedule-section{margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem}
+    .schedule-input{padding:0.3rem;border:2px solid #ddd;border-radius:6px}
+    .urgent-icon{color:#f44336;font-size:1.2rem}
+    .order-card.urgent{border-left-color:#f44336}
 
-      .schedule-section {
-        margin-top: 0.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-      .schedule-input {
-        padding: 0.3rem;
-        border: 2px solid #ddd;
-        border-radius: 6px;
-      }
-      .urgent-icon {
-        color: #f44336;
-        font-size: 1.2rem;
-      }
-      .order-card.urgent {
-        border-left-color: #f44336;
-      }
-
-      /* Range selector styles */
-      .range-picker {
-        display: flex;
-        justify-content: center;
-        gap: 1rem;
-        align-items: flex-start;
-        margin-bottom: 1rem;
-        flex-wrap: wrap;
-      }
-      .quick-ranges {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        max-height: 180px;
-        overflow-y: auto;
-        padding-right: 0.5rem;
-      }
-      .quick-ranges button {
-        padding: 0.5rem 1rem;
-        border: none;
-        background: #f0f0f0;
-        border-radius: 6px;
-        cursor: pointer;
-      }
-      .quick-ranges button:hover {
-        background: #e0e0e0;
-      }
-      .custom-range {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
-      @media (max-width: 768px) {
-        .tab-content {
-          padding: 1rem;
-        }
-        .order-header {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-        .status-section {
-          flex-direction: column;
-          align-items: stretch;
-        }
-        .status-select {
-          width: 100%;
-        }
-        .order-details {
-          grid-template-columns: 1fr;
-        }
-        .summary-grid {
-          grid-template-columns: 1fr;
-        }
-        .payout-details {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="top-header">
-      <img src="favicon.png" alt="Logo" class="logo-icon" />
+    /* Range selector styles */
+    .range-picker{display:flex;justify-content:center;gap:1rem;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap}
+    .quick-ranges{display:flex;flex-direction:column;gap:0.5rem;max-height:180px;overflow-y:auto;padding-right:0.5rem}
+    .quick-ranges button{padding:0.5rem 1rem;border:none;background:#f0f0f0;border-radius:6px;cursor:pointer}
+    .quick-ranges button:hover{background:#e0e0e0}
+    .custom-range{display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center}
+    
+    @media (max-width:768px){
+      .tab-content{padding:1rem}
+      .order-header{flex-direction:column;align-items:flex-start}
+      .status-section{flex-direction:column;align-items:stretch}
+      .status-select{width:100%}
+      .order-details{grid-template-columns:1fr}
+      .summary-grid{grid-template-columns:1fr}
+      .payout-details{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="top-header">
+    <img src="favicon.png" alt="Logo" class="logo-icon">
+  </div>
+  <div class="main-header">
+    <h1>📦 Delivery Management</h1>
+    <div class="driver-info">
+      <span id="driverName" class="driver-name"></span>
+      <span id="currentTime" class="current-time"></span>
+      <span id="deliveryRate" class="delivery-rate"></span>
     </div>
-    <div class="main-header">
-      <h1>📦 Delivery Management</h1>
-      <div class="driver-info">
-        <span id="driverName" class="driver-name"></span>
-        <span id="currentTime" class="current-time"></span>
-        <span id="deliveryRate" class="delivery-rate"></span>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showTab('scanner')">📷 Scanner</button>
+    <button class="nav-tab" onclick="showTab('orders')">📋 Orders</button>
+    <button class="nav-tab" onclick="showTab('payouts')">💰 Payouts</button>
+    <button class="nav-tab" onclick="showTab('stats')">📊 Stats</button>
+  </div>
+  
+  <div id="scanner-tab" class="tab-content active">
+    <div id="reader"></div>
+    <div id="result">Click "Start Scan" to begin scanning orders.</div>
+    <button class="scan-btn" id="scanBtn" onclick="startScanner()">📷 Start Scan</button>
+    <button class="scan-btn" id="againBtn" onclick="startScanner()" style="display:none">🔄 Scan Another</button>
+    <!-- Manual entry when a barcode is missing -->
+    <input id="manualOrderInput"
+           placeholder="Enter order # manually"
+           style="display:block;margin:1.2rem auto 0.8rem auto;
+                  padding:0.8rem 1rem;font-size:1rem;
+                  border:2px solid #ddd;border-radius:12px;width:90%;max-width:400px;">
+    <button class="scan-btn" onclick="manualAdd()">✏️ Add Order Manually</button>
+  </div>
+  
+  <div id="orders-tab" class="tab-content">
+    <div id="ordersContainer" class="orders-container">
+      <div class="loading">Click here to load orders</div>
+      <button class="scan-btn" onclick="loadOrders()">📋 Load Orders</button>
+    </div>
+  </div>
+
+  <div id="payouts-tab" class="tab-content">
+    <div id="payoutsContainer" class="payout-container">
+      <div class="loading">Click here to load payouts</div>
+      <button class="scan-btn" onclick="loadPayouts()">💰 Load Payouts</button>
+    </div>
+  </div>
+
+  <div id="stats-tab" class="tab-content">
+    <div class="range-picker">
+      <div class="quick-ranges">
+        <button onclick="selectQuickRange(7)">Last 7 days</button>
+        <button onclick="selectQuickRange(15)">Last 15 days</button>
+        <button onclick="selectQuickRange(30)">Last 30 days</button>
+        <button onclick="selectQuickRange(90)">Last 90 days</button>
+        <button onclick="selectQuickRange(0)">Since start</button>
+      </div>
+      <div class="custom-range">
+        <input type="date" id="startDate">
+        <span>to</span>
+        <input type="date" id="endDate">
+        <button class="scan-btn" style="padding:0.5rem 1rem;font-size:1rem;" onclick="loadStatsRange()">Apply</button>
       </div>
     </div>
-    <div id="alertBox" class="alert-box"></div>
-
-    <div class="nav-tabs">
-      <button class="nav-tab active" onclick="showTab('scanner')">
-        📷 Scanner
-      </button>
-      <button class="nav-tab" onclick="showTab('orders')">📋 Orders</button>
-      <button class="nav-tab" onclick="showTab('followups')">
-        🚨 Follow-Ups
-      </button>
-      <button class="nav-tab" onclick="showTab('archive')">🗄️ Archive</button>
-      <button class="nav-tab" onclick="showTab('payouts')">💰 Payouts</button>
-      <button class="nav-tab" onclick="showTab('stats')">📊 Stats</button>
+    <div id="statsContainer" class="payout-container">
+      <div class="loading">Click to load stats</div>
+      <button class="scan-btn" onclick="applyDefaultRange()">📊 Load Stats</button>
     </div>
+  </div>
 
-    <div id="scanner-tab" class="tab-content active">
-      <div id="reader"></div>
-      <div id="result">Click "Start Scan" to begin scanning orders.</div>
-      <button class="scan-btn" id="scanBtn" onclick="startScanner()">
-        📷 Start Scan
-      </button>
-      <button
-        class="scan-btn"
-        id="againBtn"
-        onclick="startScanner()"
-        style="display: none"
-      >
-        🔄 Scan Another
-      </button>
-      <!-- Manual entry when a barcode is missing -->
-      <input
-        id="manualOrderInput"
-        placeholder="Enter order # manually"
-        style="
-          display: block;
-          margin: 1.2rem auto 0.8rem auto;
-          padding: 0.8rem 1rem;
-          font-size: 1rem;
-          border: 2px solid #ddd;
-          border-radius: 12px;
-          width: 90%;
-          max-width: 400px;
-        "
-      />
-      <button class="scan-btn" onclick="manualAdd()">
-        ✏️ Add Order Manually
-      </button>
-    </div>
-
-    <div id="orders-tab" class="tab-content">
-      <div style="margin-bottom: 1rem">
-        <select
-          id="statusFilter"
-          class="status-select"
-          onchange="filterOrders()"
-        >
-          <option value="">All Statuses</option>
-        </select>
-      </div>
-      <div id="ordersContainer" class="orders-container">
-        <div class="loading">Click here to load orders</div>
-        <button class="scan-btn" onclick="loadOrders()">📋 Load Orders</button>
-      </div>
-    </div>
-
-    <div id="followups-tab" class="tab-content">
-      <div id="followupsContainer" class="orders-container">
-        <div class="loading">Click to load follow-ups</div>
-        <button class="scan-btn" onclick="loadFollowUps()">
-          🚨 Load Follow-Ups
-        </button>
-      </div>
-    </div>
-
-    <div id="archive-tab" class="tab-content">
-      <div id="archiveContainer" class="orders-container">
-        <div class="loading">Click to load archive</div>
-        <button class="scan-btn" onclick="loadArchive()">
-          🗄️ Load Archive
-        </button>
-      </div>
-    </div>
-
-    <div id="payouts-tab" class="tab-content">
-      <div id="payoutsContainer" class="payout-container">
-        <div class="loading">Click here to load payouts</div>
-        <button class="scan-btn" onclick="loadPayouts()">
-          💰 Load Payouts
-        </button>
-      </div>
-    </div>
-
-    <div id="stats-tab" class="tab-content">
-      <div class="range-picker">
-        <div class="quick-ranges">
-          <button onclick="selectQuickRange(7)">Last 7 days</button>
-          <button onclick="selectQuickRange(15)">Last 15 days</button>
-          <button onclick="selectQuickRange(30)">Last 30 days</button>
-          <button onclick="selectQuickRange(90)">Last 90 days</button>
-          <button onclick="selectQuickRange(0)">Since start</button>
-        </div>
-        <div class="custom-range">
-          <input type="date" id="startDate" />
-          <span>to</span>
-          <input type="date" id="endDate" />
-          <button
-            class="scan-btn"
-            style="padding: 0.5rem 1rem; font-size: 1rem"
-            onclick="loadStatsRange()"
-          >
-            Apply
-          </button>
-        </div>
-      </div>
-      <div id="statsContainer" class="payout-container">
-        <div class="loading">Click to load stats</div>
-        <button class="scan-btn" onclick="applyDefaultRange()">
-          📊 Load Stats
-        </button>
-      </div>
-    </div>
-
-    <script>
-      document.addEventListener("DOMContentLoaded", function () {
-        /* ─────────────────────────────────────────────────────────────
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      /* ─────────────────────────────────────────────────────────────
          1.  Tiny helper → same host as FastAPI on Render
          ────────────────────────────────────────────────────────────*/
-        const API = window.location.origin.replace(/\/$/, "");
-        const headers = { "Content-Type": "application/json" };
+      const API      = window.location.origin.replace(/\/$/, "");
+      const headers  = { "Content-Type": "application/json" };
 
-        const apiGet = (p) => fetch(`${API}${p}`).then((r) => r.json());
-        const apiPost = (p, b = {}) =>
-          fetch(`${API}${p}`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(b),
-          }).then((r) => r.json());
-        const apiPut = (p, b = {}) =>
-          fetch(`${API}${p}`, {
-            method: "PUT",
-            headers,
-            body: JSON.stringify(b),
-          }).then((r) => r.json());
+      const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
+      const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
+      const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
 
-        // 👇 Extract ?driver=driver1 from the URL (after login redirect)
-        const urlParams = new URLSearchParams(window.location.search);
-        const driverFromUrl = urlParams.get("driver");
+      // 👇 Extract ?driver=driver1 from the URL (after login redirect)
+      const urlParams = new URLSearchParams(window.location.search);
+      const driverFromUrl = urlParams.get('driver');
 
-        // 👇 If driver is in URL, save to localStorage
-        if (driverFromUrl) {
-          localStorage.setItem("driver_id", driverFromUrl);
-        }
+      // 👇 If driver is in URL, save to localStorage
+      if (driverFromUrl) {
+        localStorage.setItem("driver_id", driverFromUrl);
+      }
 
-        // 👇 Now load it from localStorage
-        const driver_id = localStorage.getItem("driver_id");
+      // 👇 Now load it from localStorage
+      const driver_id = localStorage.getItem("driver_id");
 
-        // 👇 If still no driver_id, force to login
-        if (!driver_id) {
-          window.location.href = `${window.location.origin}/login.html`;
-          return; // stop further execution if no driver
-        }
+      // 👇 If still no driver_id, force to login
+      if (!driver_id) {
+        window.location.href = `${window.location.origin}/login.html`;
+        return; // stop further execution if no driver
+      }
 
-        // Display driver name and current time in header
-        const driverNameEl = document.getElementById("driverName");
-        const currentTimeEl = document.getElementById("currentTime");
-        function updateTime() {
-          const now = new Date();
-          const timeStr = now.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          if (currentTimeEl) currentTimeEl.textContent = timeStr;
-        }
-        if (driverNameEl) {
-          driverNameEl.textContent = driver_id.toUpperCase();
-        }
-        populateStatusFilter();
-        updateTime();
-        setInterval(updateTime, 60000);
-        loadStatsHeader();
-        applyDefaultRange();
-        loadOrders();
-        loadPayouts();
-        setInterval(() => {
-          if (
-            document.getElementById("orders-tab").classList.contains("active")
-          ) {
-            loadOrders();
-          }
-          if (
-            document.getElementById("payouts-tab").classList.contains("active")
-          ) {
-            loadPayouts();
-          }
-        }, 30000);
+      // Display driver name and current time in header
+      const driverNameEl = document.getElementById('driverName');
+      const currentTimeEl = document.getElementById('currentTime');
+      function updateTime(){
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        if(currentTimeEl) currentTimeEl.textContent = timeStr;
+      }
+      if (driverNameEl) {
+        driverNameEl.textContent = driver_id.toUpperCase();
+      }
+      updateTime();
+      setInterval(updateTime, 60000);
+      loadStatsHeader();
+      applyDefaultRange();
 
-        /* ─────────────────────────────────────────────────────────────
+    
+  /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
      ────────────────────────────────────────────────────────────*/
-        let scanner,
-          orders = [],
-          payouts = [];
-        const deliveryStatuses = [
-          "Dispatched",
-          "Livré",
-          "En cours",
-          "Pas de réponse 1",
-          "Pas de réponse 2",
-          "Pas de réponse 3",
-          "Annulé",
-          "Refusé",
-          "Rescheduled",
-          "Returned",
-        ];
-        const statusColors = {
-          Dispatched: "#004aad",
-          Livré: "#4caf50",
-          "En cours": "#2196f3",
-          "Pas de réponse 1": "#ffb74d",
-          "Pas de réponse 2": "#ff9800",
-          "Pas de réponse 3": "#f44336",
-          Annulé: "#9e9e9e",
-          Refusé: "#9e9e9e",
-          Rescheduled: "#673ab7",
-          Returned: "#9e9e9e",
-        };
-        const formatMoney = (n) =>
-          (parseFloat(n) || 0).toFixed(2).replace(".", ",");
+  let scanner, orders = [], payouts = [];
+  const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
+  const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
 
-        function updateDeliveryRateDisplay(rate) {
-          const el = document.getElementById("deliveryRate");
-          if (!el) return;
-          el.textContent = rate.toFixed(0) + "%";
-          el.style.color =
-            rate >= 80 ? "#4caf50" : rate >= 60 ? "#ffb300" : "#f44336";
-        }
+  function updateDeliveryRateDisplay(rate){
+    const el = document.getElementById('deliveryRate');
+    if(!el) return;
+    el.textContent = rate.toFixed(0)+'%';
+    el.style.color = rate >= 80 ? '#4caf50' : rate >= 60 ? '#ffb300' : '#f44336';
+  }
 
-        function formatDate(d) {
-          return d.toISOString().split("T")[0];
-        }
+  function formatDate(d){
+    return d.toISOString().split('T')[0];
+  }
 
-        function computeDefaultDates() {
-          const now = new Date();
-          const end = new Date(now.getTime() - 3 * 86400000);
-          const start = new Date(end.getTime() - 29 * 86400000);
-          return { start: formatDate(start), end: formatDate(end) };
-        }
+  function computeDefaultDates(){
+    const now = new Date();
+    const end = new Date(now.getTime() - 3*86400000);
+    const start = new Date(end.getTime() - 29*86400000);
+    return {start: formatDate(start), end: formatDate(end)};
+  }
 
-        function populateStatusFilter() {
-          const sel = document.getElementById("statusFilter");
-          if (!sel) return;
-          deliveryStatuses.forEach((s) => {
-            const o = document.createElement("option");
-            o.value = s;
-            o.textContent = s;
-            sel.appendChild(o);
-          });
-        }
+  function applyDefaultRange(){
+    const {start, end} = computeDefaultDates();
+    document.getElementById('startDate').value = start;
+    document.getElementById('endDate').value = end;
+    loadStatsRange();
+  }
 
-        function filterOrders() {
-          const val = document.getElementById("statusFilter").value;
-          if (!val) {
-            displayOrders(orders);
-            return;
-          }
-          const filtered = orders.filter((o) => o.deliveryStatus === val);
-          displayOrdersCommon(
-            filtered,
-            document.getElementById("ordersContainer"),
-            true,
-          );
-        }
+  function selectQuickRange(days){
+    if(days===0){
+      document.getElementById('startDate').value='';
+      document.getElementById('endDate').value='';
+      loadStats(0);
+      return;
+    }
+    const end = new Date();
+    const start = new Date(end.getTime() - (days-1)*86400000);
+    document.getElementById('startDate').value = formatDate(start);
+    document.getElementById('endDate').value   = formatDate(end);
+    loadStatsRange();
+  }
 
-        function applyDefaultRange() {
-          const { start, end } = computeDefaultDates();
-          document.getElementById("startDate").value = start;
-          document.getElementById("endDate").value = end;
-          loadStatsRange();
-        }
+  function loadStatsHeader(){
+    const {start, end} = computeDefaultDates();
+    apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`).then(s=>{
+      if(s && typeof s.deliveryRate==='number') updateDeliveryRateDisplay(s.deliveryRate);
+    });
+  }
 
-        function selectQuickRange(days) {
-          if (days === 0) {
-            document.getElementById("startDate").value = "";
-            document.getElementById("endDate").value = "";
-            loadStats(0);
-            return;
-          }
-          const end = new Date();
-          const start = new Date(end.getTime() - (days - 1) * 86400000);
-          document.getElementById("startDate").value = formatDate(start);
-          document.getElementById("endDate").value = formatDate(end);
-          loadStatsRange();
-        }
-
-        function loadStatsHeader() {
-          const { start, end } = computeDefaultDates();
-          apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`).then(
-            (s) => {
-              if (s && typeof s.deliveryRate === "number")
-                updateDeliveryRateDisplay(s.deliveryRate);
-            },
-          );
-        }
-
-        /* ─────────────────────────────────────────────────────────────
+  /* ─────────────────────────────────────────────────────────────
      3.  Navigation tabs (unchanged UI, but auto-refreshes)
      ────────────────────────────────────────────────────────────*/
-        function showTab(t) {
-          document
-            .querySelectorAll(".nav-tab")
-            .forEach((e) => e.classList.remove("active"));
-          document
-            .querySelector(`[onclick="showTab('${t}')"]`)
-            .classList.add("active");
-          document
-            .querySelectorAll(".tab-content")
-            .forEach((e) => e.classList.remove("active"));
-          document.getElementById(`${t}-tab`).classList.add("active");
-          if (t === "orders" && !orders.length) loadOrders();
-          if (t === "followups") loadFollowUps();
-          if (t === "archive") loadArchive();
-          if (t === "payouts" && !payouts.length) loadPayouts();
-          if (t === "stats") applyDefaultRange();
-        }
+  function showTab(t){
+    document.querySelectorAll('.nav-tab').forEach(e=>e.classList.remove('active'));
+    document.querySelector(`[onclick="showTab('${t}')"]`).classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+    document.getElementById(`${t}-tab`).classList.add('active');
+    if(t==='orders' && !orders.length)  loadOrders();
+    if(t==='payouts' && !payouts.length) loadPayouts();
+    if(t==='stats') applyDefaultRange();
+  }
 
-        /* ─────────────────────────────────────────────────────────────
+  /* ─────────────────────────────────────────────────────────────
      4.  Scanner & manual-add
      ────────────────────────────────────────────────────────────*/
-        function startScanner() {
-          document.getElementById("result").innerHTML =
-            "Point your camera at the order barcode...";
-          document.getElementById("reader").style.display = "block";
-          document.getElementById("scanBtn").style.display = "none";
-          document.getElementById("againBtn").style.display = "none";
+  function startScanner(){
+    document.getElementById('result').innerHTML="Point your camera at the order barcode...";
+    document.getElementById('reader').style.display="block";
+    document.getElementById('scanBtn').style.display="none";
+    document.getElementById('againBtn').style.display="none";
 
-          scanner = new Html5Qrcode("reader");
-          scanner
-            .start(
-              { facingMode: "environment" },
-              { fps: 10, qrbox: 250 },
-              (code) => {
-                // ★ on successful scan
-                navigator.vibrate?.(200);
-                scanner.stop().then(() => {
-                  document.getElementById("reader").style.display = "none";
-                  document.getElementById("againBtn").style.display = "block";
-                  document.getElementById("result").innerHTML =
-                    "⏳ Processing scan…";
-                  apiPost(`/scan?driver=${driver_id}`, { barcode: code })
-                    .then(handleScanResult)
-                    .catch((err) => handleScanError(err));
-                });
-              },
-              () => {}, // ignore scan errors
-            )
-            .catch((e) => {
-              document.getElementById("result").innerHTML =
-                "❌ Camera error: " + e;
-              document.getElementById("reader").style.display = "none";
-              document.getElementById("scanBtn").style.display = "block";
-            });
-        }
-
-        function manualAdd() {
-          const code = document.getElementById("manualOrderInput").value.trim();
-          if (!code) {
-            alert("Enter the order number first");
-            return;
-          }
-          document.getElementById("result").innerHTML = "⏳ Adding order…";
+    scanner = new Html5Qrcode("reader");
+    scanner.start(
+      {facingMode:"environment"},
+      {fps:10,qrbox:250},
+      code => {                       // ★ on successful scan
+        navigator.vibrate?.(200);
+        scanner.stop().then(()=>{
+          document.getElementById('reader').style.display="none";
+          document.getElementById('againBtn').style.display="block";
+          document.getElementById('result').innerHTML='⏳ Processing scan…';
           apiPost(`/scan?driver=${driver_id}`, { barcode: code })
             .then(handleScanResult)
-            .catch(handleScanError);
-        }
+            .catch(err => handleScanError(err));
+        });
+      },
+      () => {}                        // ignore scan errors
+    ).catch(e=>{
+      document.getElementById('result').innerHTML="❌ Camera error: "+e;
+      document.getElementById('reader').style.display="none";
+      document.getElementById('scanBtn').style.display="block";
+    });
+  }
 
-        /* ─────────────────────────────────────────────────────────────
+  function manualAdd(){
+    const code = document.getElementById('manualOrderInput').value.trim();
+    if(!code){alert('Enter the order number first');return;}
+    document.getElementById('result').innerHTML='⏳ Adding order…';
+    apiPost(`/scan?driver=${driver_id}`, { barcode: code })
+      .then(handleScanResult)
+      .catch(handleScanError);
+  }
+
+  /* ─────────────────────────────────────────────────────────────
      5.  Scan result handlers  (now expect JSON object, not string)
      ────────────────────────────────────────────────────────────*/
-        function handleScanResult(r) {
-          const { result, order, tag, deliveryStatus } = r || {};
-          document.getElementById("result").innerHTML = `
-      <div style="font-weight:600;margin-bottom:0.5rem;">${result || "Unknown"}</div>
-      <div>Order: ${order || "N/A"}</div>
-      ${tag ? `<div>Tag: <span class="tag-badge tag-${tag}">${tag}</span></div>` : ""}
-      ${deliveryStatus ? `<div>Status: ${deliveryStatus}</div>` : ""}`;
-        }
-        function handleScanError(e) {
-          document.getElementById("result").innerHTML = "❌ Scan failed: " + e;
-          document.getElementById("againBtn").style.display = "block";
-        }
+  function handleScanResult(r){
+    const {result,order,tag,deliveryStatus} = r || {};
+    document.getElementById('result').innerHTML = `
+      <div style="font-weight:600;margin-bottom:0.5rem;">${result||'Unknown'}</div>
+      <div>Order: ${order||'N/A'}</div>
+      ${tag?`<div>Tag: <span class="tag-badge tag-${tag}">${tag}</span></div>`:''}
+      ${deliveryStatus?`<div>Status: ${deliveryStatus}</div>`:''}`;
+  }
+  function handleScanError(e){
+    document.getElementById('result').innerHTML="❌ Scan failed: "+e;
+    document.getElementById('againBtn').style.display="block";
+  }
 
-        /* ─────────────────────────────────────────────────────────────
+  /* ─────────────────────────────────────────────────────────────
      6.  Orders
      ────────────────────────────────────────────────────────────*/
-        function loadOrders() {
-          document.getElementById("ordersContainer").innerHTML =
-            '<div class="loading">Loading orders...</div>';
-          apiGet(`/orders?driver=${driver_id}`)
-            .then(displayOrders)
-            .catch(
-              (e) =>
-                (document.getElementById("ordersContainer").innerHTML =
-                  '<div class="no-orders">❌ ' + e + "</div>"),
-            );
-        }
+  function loadOrders(){
+    document.getElementById('ordersContainer').innerHTML='<div class="loading">Loading orders...</div>';
+    apiGet(`/orders?driver=${driver_id}`)
+      .then(displayOrders)
+      .catch(e=>document.getElementById('ordersContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
 
-        function loadFollowUps() {
-          document.getElementById("followupsContainer").innerHTML =
-            '<div class="loading">Loading follow-ups...</div>';
-          apiGet(`/orders/followups?driver=${driver_id}`)
-            .then(displayFollowups)
-            .catch(
-              (e) =>
-                (document.getElementById("followupsContainer").innerHTML =
-                  '<div class="no-orders">❌ ' + e + "</div>"),
-            );
-        }
+  function displayOrders(ol){
+    orders = ol || [];
+    const c = document.getElementById('ordersContainer');
+    if(!orders.length){ c.innerHTML='<div class="no-orders">📭 No active orders found.</div>'; return; }
 
-        function loadArchive() {
-          document.getElementById("archiveContainer").innerHTML =
-            '<div class="loading">Loading archive...</div>';
-          apiGet(`/orders/archive?driver=${driver_id}`)
-            .then(displayArchive)
-            .catch(
-              (e) =>
-                (document.getElementById("archiveContainer").innerHTML =
-                  '<div class="no-orders">❌ ' + e + "</div>"),
-            );
-        }
+    orders.sort((a,b)=>{
+      const at=a.scheduledTime?new Date(a.scheduledTime).getTime():Infinity;
+      const bt=b.scheduledTime?new Date(b.scheduledTime).getTime():Infinity;
+      return at-bt;
+    });
 
-        function displayOrdersCommon(list, container, showSummary) {
-          const data = list || [];
-          if (!data.length) {
-            container.innerHTML =
-              '<div class="no-orders">📭 No orders found.</div>';
-            return;
-          }
+    const counts = {'Pas de réponse 1':0,'Pas de réponse 2':0,'Pas de réponse 3':0,'Rescheduled':0};
+    orders.forEach(o=>{
+      if(counts.hasOwnProperty(o.deliveryStatus)) counts[o.deliveryStatus]++;
+    });
 
-          data.sort((a, b) => {
-            const at = a.scheduledTime
-              ? new Date(a.scheduledTime).getTime()
-              : Infinity;
-            const bt = b.scheduledTime
-              ? new Date(b.scheduledTime).getTime()
-              : Infinity;
-            return at - bt;
-          });
-
-          const counts = {
-            "Pas de réponse 1": 0,
-            "Pas de réponse 2": 0,
-            "Pas de réponse 3": 0,
-            Rescheduled: 0,
-          };
-          data.forEach((o) => {
-            if (counts.hasOwnProperty(o.deliveryStatus))
-              counts[o.deliveryStatus]++;
-          });
-
-          let h = "";
-          if (showSummary) {
-            h +=
-              `<div class="order-summary"><h2 style="text-align:center;margin-bottom:1rem;">📋 Orders Summary</h2><div class="summary-grid">` +
-              `<div class="summary-item"><div class="summary-label">Active</div><div class="summary-value">${data.length}</div></div>` +
-              `<div class="summary-item"><div class="summary-label">Pas de réponse 1</div><div class="summary-value">${counts["Pas de réponse 1"]}</div></div>` +
-              `<div class="summary-item"><div class="summary-label">Pas de réponse 2</div><div class="summary-value">${counts["Pas de réponse 2"]}</div></div>` +
-              `<div class="summary-item"><div class="summary-label">Pas de réponse 3</div><div class="summary-value">${counts["Pas de réponse 3"]}</div></div>` +
-              `<div class="summary-item"><div class="summary-label">Rescheduled</div><div class="summary-value">${counts["Rescheduled"]}</div></div>` +
-              `</div></div>`;
-          }
-
-          data.forEach((o) => {
-            if (o.commLog) {
-              try {
-                saveCommLog(o.orderName, JSON.parse(o.commLog));
-              } catch (e) {}
-            }
-            const tc = getPrimaryTag(o.tags);
-            const isExchange =
-              tc === "ch" || (o.tags || "").toLowerCase().includes("ch");
-            const fee = isExchange ? 10 : 20;
-            const delivered = o.deliveryStatus === "Livré";
-            const waMsg = encodeURIComponent(
-              `Salam/Bonjour ${o.customerName || ""}, votre livreur ${driver_id} vous contacte. J'ai votre commande numéro ${o.orderName} d'un total de ${o.cashAmount || 0} DH. Merci de m'envoyer votre localisation pour pouvoir livrer à votre adresse exacte. \nالسلام عليكم ${o.customerName || ""}، معك عامل التوصيل ${driver_id}. أتوفر على طلبك رقم ${o.orderName} بمبلغ إجمالي ${o.cashAmount || 0} درهم. المرجو إرسال موقعك عبر خرائط جوجل لتسليم الطلب إلى عنوانك الصحيح.`,
-            );
-            const waUrl = `https://wa.me/${o.customerPhone}?text=${waMsg}`;
-            const border = statusColors[o.deliveryStatus] || "#004aad";
-            h +=
-              `<div class="order-card ${delivered ? "delivered" : ""} ${o.urgent ? "followup" : ""}" style="border-left-color:${border}">` +
-              `<div class="order-header"><div class="order-name">${o.orderName}</div><div class="scan-date">📅 ${o.scanDate}</div></div>` +
-              `<div class="customer-info"><div class="customer-name">${o.customerName || "N/A"}</div>` +
-              `${o.customerPhone ? `<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}" target="_blank" class="wa-btn" onclick="return recordWhatsapp('${o.orderName}')">💬</a></div>` : ""}` +
-              `<div class="address">📍 ${o.address || "No address provided"}</div>` +
-              `${tc ? `<span class="tag-badge tag-${tc}">${tc}</span>` : ""}` +
-              `<div id="comm-${o.orderName}" class="comm-log"></div></div>` +
-              `<div class="order-details"><div class="detail-item"><div class="detail-label">Cash Amount (DH)</div>` +
-              `<input type="number" class="cash-input" value="${o.cashAmount || ""}" onchange="updateCashAmount('${o.orderName}',this.value)"></div>` +
-              `<div class="detail-item"><div class="detail-label">Driver Fee</div><div class="detail-value fee-display ${isExchange ? "fee-exchange" : ""}">${fee} DH ${isExchange ? "(Exchange)" : ""}</div></div></div>` +
-              `<div class="status-section"><select class="status-select" onchange="updateOrderStatus('${o.orderName}',this.value,this)">` +
-              `${deliveryStatuses.map((s) => `<option value="${s}"${s === o.deliveryStatus ? " selected" : ""}>${s}</option>`).join("")}` +
-              `</select></div>` +
-              `<div class="schedule-section"><input type="datetime-local" class="schedule-input" value="${o.scheduledTime || ""}" onchange="updateScheduledTime('${o.orderName}',this.value)">` +
-              `${o.urgent ? '<span class="urgent-icon">🔔</span>' : ""}` +
-              `${o.scheduledTime ? `<span class="countdown" data-time="${o.scheduledTime}"></span>` : ""}</div>` +
-              `<div class="notes-section"><textarea class="notes-input" placeholder="Add notes…" onchange="updateOrderNotes('${o.orderName}',this.value)">${o.notes || ""}</textarea>` +
-              `<textarea class="notes-input" placeholder="Follow up…" onchange="updateFollowLog('${o.orderName}',this.value)">${o.followLog || ""}</textarea>` +
-              `${o.statusLog ? `<div class="status-log">${o.statusLog.replace(/\|/g, "\n")}</div>` : ""}</div></div>`;
-          });
-
-          container.innerHTML = h;
-          data.forEach((o) => displayCommunicationLog(o.orderName));
-          startCountdown();
-        }
-
-        function displayFollowups(fl) {
-          const c = document.getElementById("followupsContainer");
-          const list = fl || [];
-          if (!list.length) {
-            c.innerHTML = '<div class="no-orders">No follow-ups.</div>';
-            return;
-          }
-          displayOrdersCommon(list, c, false);
-        }
-
-        function displayArchive(al) {
-          const c = document.getElementById("archiveContainer");
-          const list = al || [];
-          if (!list.length) {
-            c.innerHTML = '<div class="no-orders">No archived orders.</div>';
-            return;
-          }
-          displayOrdersCommon(list, c, false);
-        }
-
-        function displayOrders(ol) {
-          orders = ol || [];
-          const c = document.getElementById("ordersContainer");
-          if (!orders.length) {
-            c.innerHTML =
-              '<div class="no-orders">📭 No active orders found.</div>';
-            return;
-          }
-
-          orders.sort((a, b) => {
-            const at = a.scheduledTime
-              ? new Date(a.scheduledTime).getTime()
-              : Infinity;
-            const bt = b.scheduledTime
-              ? new Date(b.scheduledTime).getTime()
-              : Infinity;
-            return at - bt;
-          });
-
-          const counts = {
-            "Pas de réponse 1": 0,
-            "Pas de réponse 2": 0,
-            "Pas de réponse 3": 0,
-            Rescheduled: 0,
-          };
-          orders.forEach((o) => {
-            if (counts.hasOwnProperty(o.deliveryStatus))
-              counts[o.deliveryStatus]++;
-          });
-
-          let h = `
+    let h = `
       <div class="order-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">📋 Orders Summary</h2>
         <div class="summary-grid">
           <div class="summary-item"><div class="summary-label">Active</div><div class="summary-value">${orders.length}</div></div>
-          <div class="summary-item"><div class="summary-label">Pas de réponse 1</div><div class="summary-value">${counts["Pas de réponse 1"]}</div></div>
-          <div class="summary-item"><div class="summary-label">Pas de réponse 2</div><div class="summary-value">${counts["Pas de réponse 2"]}</div></div>
-          <div class="summary-item"><div class="summary-label">Pas de réponse 3</div><div class="summary-value">${counts["Pas de réponse 3"]}</div></div>
-          <div class="summary-item"><div class="summary-label">Rescheduled</div><div class="summary-value">${counts["Rescheduled"]}</div></div>
+          <div class="summary-item"><div class="summary-label">Pas de réponse 1</div><div class="summary-value">${counts['Pas de réponse 1']}</div></div>
+          <div class="summary-item"><div class="summary-label">Pas de réponse 2</div><div class="summary-value">${counts['Pas de réponse 2']}</div></div>
+          <div class="summary-item"><div class="summary-label">Pas de réponse 3</div><div class="summary-value">${counts['Pas de réponse 3']}</div></div>
+          <div class="summary-item"><div class="summary-label">Rescheduled</div><div class="summary-value">${counts['Rescheduled']}</div></div>
         </div>
       </div>`;
 
-          orders.forEach((o) => {
-            if (o.commLog) {
-              try {
-                saveCommLog(o.orderName, JSON.parse(o.commLog));
-              } catch (e) {}
-            }
-            const tc = getPrimaryTag(o.tags);
-            const isExchange =
-              tc === "ch" || (o.tags || "").toLowerCase().includes("ch");
-            const fee = isExchange ? 10 : 20;
-            const delivered = o.deliveryStatus === "Livré";
-            const waMsg = encodeURIComponent(
-              `Salam/Bonjour ${o.customerName || ""}, votre livreur ${driver_id} vous contacte. ` +
-                `J'ai votre commande numéro ${o.orderName} d'un total de ${o.cashAmount || 0} DH. ` +
-                `Merci de m'envoyer votre localisation pour pouvoir livrer à votre adresse exacte. ` +
-                `\nالسلام عليكم ${o.customerName || ""}، معك عامل التوصيل ${driver_id}. ` +
-                `أتوفر على طلبك رقم ${o.orderName} بمبلغ إجمالي ${o.cashAmount || 0} درهم. ` +
-                `المرجو إرسال موقعك عبر خرائط جوجل لتسليم الطلب إلى عنوانك الصحيح.`,
-            );
-            const waUrl = `https://wa.me/${o.customerPhone}?text=${waMsg}`;
-            h += `<div class="order-card ${delivered ? "delivered" : ""}">
+    orders.forEach(o=>{
+      const tc = getPrimaryTag(o.tags);
+      const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
+      const fee = isExchange ? 10 : 20;
+      const delivered = o.deliveryStatus === 'Livré';
+      const waMsg = encodeURIComponent(
+        `Salam/Bonjour ${o.customerName||''}, votre livreur ${driver_id} vous contacte. ` +
+        `J'ai votre commande numéro ${o.orderName} d'un total de ${o.cashAmount||0} DH. ` +
+        `Merci de m'envoyer votre localisation pour pouvoir livrer à votre adresse exacte. ` +
+        `\nالسلام عليكم ${o.customerName||''}، معك عامل التوصيل ${driver_id}. ` +
+        `أتوفر على طلبك رقم ${o.orderName} بمبلغ إجمالي ${o.cashAmount||0} درهم. ` +
+        `المرجو إرسال موقعك عبر خرائط جوجل لتسليم الطلب إلى عنوانك الصحيح.`
+      );
+      const waUrl = `https://wa.me/${o.customerPhone}?text=${waMsg}`;
+      h += `<div class="order-card ${delivered?'delivered':''}">
         <div class="order-header">
           <div class="order-name">${o.orderName}</div>
           <div class="scan-date">📅 ${o.scanDate}</div>
         </div>
         <div class="customer-info">
-          <div class="customer-name">${o.customerName || "N/A"}</div>
-          ${
-            o.customerPhone
-              ? `<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}"
+          <div class="customer-name">${o.customerName||'N/A'}</div>
+          ${o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}"
         target="_blank"
         class="wa-btn"
-        onclick="return recordWhatsapp('${o.orderName}')">💬</a></div>`
-              : ""
-          }
-          <div class="address">📍 ${o.address || "No address provided"}</div>
-          ${tc ? `<span class="tag-badge tag-${tc}">${tc}</span>` : ""}
+        onclick="return recordWhatsapp('${o.orderName}')">💬</a></div>`:''}
+          <div class="address">📍 ${o.address||'No address provided'}</div>
+          ${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}
           <div id="comm-${o.orderName}" class="comm-log"></div>
         </div>
         <div class="order-details">
           <div class="detail-item">
             <div class="detail-label">Cash Amount (DH)</div>
-            <input type="number" class="cash-input" value="${o.cashAmount || ""}" placeholder="Enter cash amount"
+            <input type="number" class="cash-input" value="${o.cashAmount||''}" placeholder="Enter cash amount"
                    onchange="updateCashAmount('${o.orderName}',this.value)">
           </div>
           <div class="detail-item">
             <div class="detail-label">Driver Fee</div>
-            <div class="detail-value fee-display ${isExchange ? "fee-exchange" : ""}">${fee} DH ${isExchange ? "(Exchange)" : ""}</div>
+            <div class="detail-value fee-display ${isExchange?'fee-exchange':''}">${fee} DH ${isExchange?'(Exchange)':''}</div>
           </div>
         </div>
         <div class="status-section">
           <select class="status-select" onchange="updateOrderStatus('${o.orderName}',this.value,this)">
-            ${deliveryStatuses.map((s) => `<option value="${s}"${s === o.deliveryStatus ? " selected" : ""}>${s}</option>`).join("")}
+            ${deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
           </select>
         </div>
         <div class="schedule-section">
-          <input type="datetime-local" class="schedule-input" value="${o.scheduledTime || ""}" onchange="updateScheduledTime('${o.orderName}',this.value)">
-          ${o.urgent ? '<span class="urgent-icon">🔔</span>' : ""}
-          ${o.scheduledTime ? `<span class="countdown" data-time="${o.scheduledTime}"></span>` : ""}
+          <input type="datetime-local" class="schedule-input" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${o.orderName}',this.value)">
+          ${o.urgent?'<span class="urgent-icon">🔔</span>':''}
+          ${o.scheduledTime?`<span class="countdown" data-time="${o.scheduledTime}"></span>`:''}
         </div>
         <div class="notes-section">
-          <textarea class="notes-input" placeholder="Add notes…" onchange="updateOrderNotes('${o.orderName}',this.value)">${o.notes || ""}</textarea>
-          <textarea class="notes-input" placeholder="Follow up…" onchange="updateFollowLog('${o.orderName}',this.value)">${o.followLog || ""}</textarea>
-          ${o.statusLog ? `<div class="status-log">${o.statusLog.replace(/\|/g, "\n")}</div>` : ""}
+          <textarea class="notes-input" placeholder="Add notes…" onchange="updateOrderNotes('${o.orderName}',this.value)">${o.notes||''}</textarea>
+          ${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}
         </div>
       </div>`;
-          });
-          c.innerHTML = h;
-          orders.forEach((o) => displayCommunicationLog(o.orderName));
-          startCountdown();
-        }
+    });
+    c.innerHTML = h;
+    orders.forEach(o=>displayCommunicationLog(o.orderName));
+    startCountdown();
+  }
 
-        /* ─────────────────────────────────────────────────────────────
+  /* ─────────────────────────────────────────────────────────────
      7.  Orders – update endpoints
      ────────────────────────────────────────────────────────────*/
-        function updateOrderStatus(orderName, newStatus, selectEl) {
-          apiPut(`/order/status?driver=${driver_id}`, {
-            order_name: orderName,
-            new_status: newStatus,
-          })
-            .then(() => {
-              const card = selectEl.closest(".order-card");
-              if (newStatus === "Livré") {
-                card.classList.add("delivered");
-                showStatusAnimation(card, "success", () => {
-                  slideAndRemove(card, "right", loadOrders);
-                });
-                loadPayouts();
-              } else if (["Annulé", "Refusé", "Returned"].includes(newStatus)) {
-                showStatusAnimation(card, "fail", () => {
-                  slideAndRemove(card, "left", loadOrders);
-                });
-                loadPayouts();
-              }
-            })
-            .catch((e) => alert("Error updating status: " + e));
-        }
-
-        function updateOrderNotes(orderName, note) {
-          apiPut(`/order/status?driver=${driver_id}`, {
-            order_name: orderName,
-            note,
-          })
-            .then(() => showAlert("Notes saved"))
-            .catch((e) => alert("Error updating notes: " + e));
-        }
-
-        function updateFollowLog(orderName, log) {
-          apiPut(`/order/status?driver=${driver_id}`, {
-            order_name: orderName,
-            follow_log: log,
-          })
-            .then(() => showAlert("Follow-up saved"))
-            .catch((e) => alert("Error updating follow log: " + e));
-        }
-
-        function updateCashAmount(orderName, amount) {
-          const cash = parseFloat(amount) || 0;
-          apiPut(`/order/status?driver=${driver_id}`, {
-            order_name: orderName,
-            cash_amount: cash,
-          })
-            .then(() => showAlert("Cash updated"))
-            .catch((e) => alert("Error updating cash amount: " + e));
-        }
-
-        function updateScheduledTime(orderName, timeStr) {
-          apiPut(`/order/status?driver=${driver_id}`, {
-            order_name: orderName,
-            scheduled_time: timeStr,
-          })
-            .then(() => {
-              showAlert("Scheduled");
-              loadOrders();
-            })
-            .catch((e) => alert("Error updating schedule: " + e));
-        }
-
-        function showStatusAnimation(card, type, done) {
-          const overlay = document.createElement("div");
-          overlay.className = "status-overlay";
-          overlay.textContent = type === "success" ? "✅" : "👎";
-          card.style.position = "relative";
-          card.appendChild(overlay);
-          setTimeout(() => {
-            overlay.remove();
-            done && done();
-          }, 800);
-        }
-
-        function showAlert(msg) {
-          const box = document.getElementById("alertBox");
-          if (!box) return;
-          box.textContent = msg;
-          box.style.display = "block";
-          setTimeout(() => {
-            box.style.display = "none";
-          }, 3000);
-        }
-
-        function slideAndRemove(card, dir, done) {
-          card.classList.add(dir === "right" ? "slide-right" : "slide-left");
-          setTimeout(() => {
-            card.remove();
-            done && done();
-          }, 500);
-        }
-
-        function startCountdown() {
-          document.querySelectorAll(".countdown").forEach((span) => {
-            const t = span.dataset.time;
-            if (!t) return;
-            function update() {
-              const diff = new Date(t) - new Date();
-              if (diff <= 0) {
-                span.textContent = "0h 0m";
-                span.closest(".order-card")?.classList.add("urgent");
-                return;
-              }
-              const h = Math.floor(diff / 3600000);
-              const m = Math.floor((diff % 3600000) / 60000);
-              span.textContent = `${h}h ${m}m`;
-              if (diff <= 3600000) {
-                span.closest(".order-card")?.classList.add("urgent");
-              } else {
-                span.closest(".order-card")?.classList.remove("urgent");
-              }
-            }
-            update();
-            setInterval(update, 60000);
+  function updateOrderStatus(orderName,newStatus,selectEl){
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, new_status: newStatus})
+      .then(()=>{
+        const card = selectEl.closest('.order-card');
+        if(newStatus==='Livré'){
+          card.classList.add('delivered');
+          showStatusAnimation(card,'success',()=>{
+            slideAndRemove(card,'right',loadOrders);
           });
+          loadPayouts();
+        } else if(['Annulé','Refusé','Returned'].includes(newStatus)){
+          showStatusAnimation(card,'fail',()=>{
+            slideAndRemove(card,'left',loadOrders);
+          });
+          loadPayouts();
         }
+      })
+      .catch(e=>alert('Error updating status: '+e));
+  }
 
-        /* ─────────────────────────────────────────────────────────────
+  function updateOrderNotes(orderName,note){
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, note})
+      .catch(e=>alert('Error updating notes: '+e));
+  }
+
+  function updateCashAmount(orderName,amount){
+    const cash = parseFloat(amount)||0;
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, cash_amount: cash})
+      .catch(e=>alert('Error updating cash amount: '+e));
+  }
+
+  function updateScheduledTime(orderName,timeStr){
+    apiPut(`/order/status?driver=${driver_id}`,
+           {order_name: orderName, scheduled_time: timeStr})
+      .then(()=>loadOrders())
+      .catch(e=>alert('Error updating schedule: '+e));
+  }
+
+  function showStatusAnimation(card,type,done){
+    const overlay=document.createElement('div');
+    overlay.className='status-overlay';
+    overlay.textContent=type==='success'?'✅':'👎';
+    card.style.position='relative';
+    card.appendChild(overlay);
+    setTimeout(()=>{
+      overlay.remove();
+      done && done();
+    },800);
+  }
+
+  function slideAndRemove(card,dir,done){
+    card.classList.add(dir==='right'?'slide-right':'slide-left');
+    setTimeout(()=>{
+      card.remove();
+      done && done();
+    },500);
+  }
+
+  function startCountdown(){
+    document.querySelectorAll('.countdown').forEach(span=>{
+      const t = span.dataset.time;
+      if(!t) return;
+      function update(){
+        const diff = new Date(t) - new Date();
+        if(diff <= 0){
+          span.textContent = '0h 0m';
+          span.closest('.order-card')?.classList.add('urgent');
+          return;
+        }
+        const h = Math.floor(diff/3600000);
+        const m = Math.floor((diff%3600000)/60000);
+        span.textContent = `${h}h ${m}m`;
+        if(diff <= 3600000){
+          span.closest('.order-card')?.classList.add('urgent');
+        } else {
+          span.closest('.order-card')?.classList.remove('urgent');
+        }
+      }
+      update();
+      setInterval(update,60000);
+    });
+  }
+
+  /* ─────────────────────────────────────────────────────────────
      Communication logging
      ────────────────────────────────────────────────────────────*/
-        function getCommLog(order) {
-          try {
-            return JSON.parse(localStorage.getItem("log_" + order) || "{}");
-          } catch (e) {
-            return {};
-          }
-        }
-        function saveCommLog(order, log) {
-          localStorage.setItem("log_" + order, JSON.stringify(log));
-        }
-        function recordCall(order, href) {
-          const log = getCommLog(order);
-          log.calls = log.calls || [];
-          log.calls.push(new Date().toLocaleString());
-          saveCommLog(order, log);
-          apiPut(`/order/status?driver=${driver_id}`, {
-            order_name: order,
-            comm_log: JSON.stringify(log),
-          }).catch(() => {});
-          displayCommunicationLog(order);
-          showAlert("Call logged");
-          return true;
-        }
-        function recordWhatsapp(order) {
-          const log = getCommLog(order);
-          log.whats = log.whats || [];
-          log.whats.push(new Date().toLocaleString());
-          saveCommLog(order, log);
-          apiPut(`/order/status?driver=${driver_id}`, {
-            order_name: order,
-            comm_log: JSON.stringify(log),
-          }).catch(() => {});
-          displayCommunicationLog(order);
-          showAlert("WhatsApp logged");
-          return true; // let the <a> continue to WhatsApp
-        }
-        function displayCommunicationLog(order) {
-          const log = getCommLog(order);
-          const el = document.getElementById("comm-" + order);
-          if (!el) return;
-          const calls = (log.calls || [])
-            .map((t) => "\ud83d\udcde " + t)
-            .join("\n");
-          const whats = (log.whats || [])
-            .map((t) => "\ud83d\udc8c " + t)
-            .join("\n");
-          el.textContent = [calls, whats].filter(Boolean).join("\n");
-        }
+  function getCommLog(order){
+    try{ return JSON.parse(localStorage.getItem('log_'+order)||'{}'); }catch(e){return {};}
+  }
+  function saveCommLog(order,log){
+    localStorage.setItem('log_'+order,JSON.stringify(log));
+  }
+  function recordCall(order,href){
+    const log=getCommLog(order);log.calls=log.calls||[];
+    log.calls.push(new Date().toLocaleString());
+    saveCommLog(order,log);
+    displayCommunicationLog(order);
+    return true;
+  }
+  function recordWhatsapp(order){
+    const log = getCommLog(order);
+    log.whats  = log.whats || [];
+    log.whats.push(new Date().toLocaleString());
+    saveCommLog(order, log);
+    displayCommunicationLog(order);
+    return true;          // let the <a> continue to WhatsApp
+  }
+  function displayCommunicationLog(order){
+    const log=getCommLog(order);
+    const el=document.getElementById('comm-'+order);
+    if(!el) return;
+    const calls=(log.calls||[]).map(t=>'\ud83d\udcde '+t).join('\n');
+    const whats=(log.whats||[]).map(t=>'\ud83d\udc8c '+t).join('\n');
+    el.textContent=[calls,whats].filter(Boolean).join('\n');
+  }
 
-        /* ─────────────────────────────────────────────────────────────
+  /* ─────────────────────────────────────────────────────────────
      8.  Payouts
      ────────────────────────────────────────────────────────────*/
-        function loadPayouts() {
-          document.getElementById("payoutsContainer").innerHTML =
-            '<div class="loading">Loading payouts...</div>';
-          apiGet(`/payouts?driver=${driver_id}`)
-            .then(displayPayouts)
-            .catch(
-              (e) =>
-                (document.getElementById("payoutsContainer").innerHTML =
-                  '<div class="no-orders">❌ ' + e + "</div>"),
-            );
-        }
+  function loadPayouts(){
+    document.getElementById('payoutsContainer').innerHTML='<div class="loading">Loading payouts...</div>';
+    apiGet(`/payouts?driver=${driver_id}`)
+      .then(displayPayouts)
+      .catch(e=>document.getElementById('payoutsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
 
-        function displayPayouts(pl) {
-          payouts = Array.isArray(pl) ? pl : pl ? [pl] : [];
-          const c = document.getElementById("payoutsContainer");
-          if (!payouts.length) {
-            c.innerHTML = '<div class="no-orders">💰 No payouts found.</div>';
-            return;
-          }
-          const active = payouts.filter(
-            (p) => p.status !== "paid" && p.status !== "Paid",
-          );
-          const totalCash = active.reduce((s, p) => s + p.totalCash, 0);
-          const totalFees = active.reduce((s, p) => s + p.totalFees, 0);
-          const totalPayout = active.reduce((s, p) => s + p.totalPayout, 0);
-          const pendingCnt = active.length;
+  function displayPayouts(pl){
+    payouts = Array.isArray(pl)?pl:pl? [pl]:[];
+    const c = document.getElementById('payoutsContainer');
+    if(!payouts.length){
+      c.innerHTML='<div class="no-orders">💰 No payouts found.</div>'; return;
+    }
+    const active = payouts.filter(p=>p.status!=='paid' && p.status!=='Paid');
+    const totalCash  = active.reduce((s,p)=>s+p.totalCash ,0);
+    const totalFees  = active.reduce((s,p)=>s+p.totalFees ,0);
+    const totalPayout= active.reduce((s,p)=>s+p.totalPayout,0);
+    const pendingCnt = active.length;
 
-          let h = `
+    let h = `
       <div class="payout-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">💰 Payout Summary</h2>
         <div class="summary-grid">
@@ -1516,23 +617,14 @@
         </div>
       </div>`;
 
-          payouts.forEach((p) => {
-            const paid = p.status === "paid" || p.status === "Paid";
-            const ordersArr = (p.orders || "")
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean);
-            const details = Array.isArray(p.orderDetails)
-              ? p.orderDetails
-              : ordersArr.map((o) => ({
-                  name: o,
-                  cashAmount: 0,
-                  driverFee: 0,
-                }));
-            h += `<div class="payout-card ${paid ? "paid" : ""}">
+    payouts.forEach(p=>{
+      const paid = p.status==='paid'||p.status==='Paid';
+      const ordersArr = (p.orders||"").split(',').map(s=>s.trim()).filter(Boolean);
+      const details = Array.isArray(p.orderDetails)?p.orderDetails:ordersArr.map(o=>({name:o,cashAmount:0,driverFee:0}));
+      h += `<div class="payout-card ${paid?'paid':''}">
         <div class="payout-header">
-          <div class="payout-period">📅 ${p.dateCreated || "N/A"}</div>
-          <div class="payout-status ${paid ? "status-paid" : "status-pending"}">${paid ? "✅ Paid" : "⏳ Pending"}</div>
+          <div class="payout-period">📅 ${p.dateCreated||'N/A'}</div>
+          <div class="payout-status ${paid?'status-paid':'status-pending'}">${paid?'✅ Paid':'⏳ Pending'}</div>
         </div>
         <div class="payout-details">
           <div class="detail-item"><div class="detail-label">Cash</div><div class="detail-value">${formatMoney(p.totalCash)} DH</div></div>
@@ -1542,74 +634,50 @@
         </div>
         <div class="payout-orders">
           <h4 style="margin-bottom:0.5rem;color:#666;">Orders in this payout:</h4>
-          ${
-            details.length
-              ? details
-                  .map(
-                    (d) =>
-                      `<div class="payout-order-item"><span>${d.name}</span><span>${formatMoney(d.cashAmount)} DH</span></div>`,
-                  )
-                  .join("")
-              : '<div style="color:#999;font-style:italic;">No orders</div>'
-          }
+          ${details.length?details.map(d=>`<div class="payout-order-item"><span>${d.name}</span><span>${formatMoney(d.cashAmount)} DH</span></div>`).join(''):
+            '<div style="color:#999;font-style:italic;">No orders</div>'}
         </div>
-        ${!paid ? `<button class="mark-paid-btn" onclick="markPayoutPaid('${p.payoutId}')">💰 Mark as Paid</button>` : ""}
+        ${!paid?`<button class="mark-paid-btn" onclick="markPayoutPaid('${p.payoutId}')">💰 Mark as Paid</button>`:''}
       </div>`;
-          });
-          c.innerHTML = h;
-        }
+    });
+    c.innerHTML = h;
+  }
 
-        function markPayoutPaid(payoutId) {
-          const url = `/payout/mark-paid/${encodeURIComponent(payoutId)}?driver=${driver_id}`;
-          apiPost(url)
-            .then(() => {
-              alert("✅ Payout marked as paid");
-              loadPayouts(); // refresh the list
-            })
-            .catch((e) => alert("Error marking payout: " + e));
-        }
+  function markPayoutPaid(payoutId){
+    const url = `/payout/mark-paid/${encodeURIComponent(payoutId)}?driver=${driver_id}`;
+     apiPost(url)
+       .then(() => {
+         alert('✅ Payout marked as paid');
+         loadPayouts();          // refresh the list
+       })
+      .catch(e => alert('Error marking payout: ' + e));
+  }
 
-        /* ─────────────────────────────────────────────────────────────
+  /* ─────────────────────────────────────────────────────────────
      9.  Stats
      ────────────────────────────────────────────────────────────*/
-        function loadStats(range) {
-          const days =
-            range || document.getElementById("statsRange").value || 15;
-          document.getElementById("statsContainer").innerHTML =
-            '<div class="loading">Loading stats...</div>';
-          apiGet(`/stats?driver=${driver_id}&days=${days}`)
-            .then(displayStats)
-            .catch(
-              (e) =>
-                (document.getElementById("statsContainer").innerHTML =
-                  '<div class="no-orders">❌ ' + e + "</div>"),
-            );
-        }
+  function loadStats(range){
+    const days = range || document.getElementById('statsRange').value || 15;
+    document.getElementById('statsContainer').innerHTML='<div class="loading">Loading stats...</div>';
+    apiGet(`/stats?driver=${driver_id}&days=${days}`)
+      .then(displayStats)
+      .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
 
-        function loadStatsRange() {
-          const start = document.getElementById("startDate").value;
-          const end = document.getElementById("endDate").value;
-          if (!start || !end) {
-            alert("Select start and end dates");
-            return;
-          }
-          document.getElementById("statsContainer").innerHTML =
-            '<div class="loading">Loading stats...</div>';
-          apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`)
-            .then(displayStats)
-            .catch(
-              (e) =>
-                (document.getElementById("statsContainer").innerHTML =
-                  '<div class="no-orders">❌ ' + e + "</div>"),
-            );
-        }
+  function loadStatsRange(){
+    const start = document.getElementById('startDate').value;
+    const end   = document.getElementById('endDate').value;
+    if(!start || !end){alert('Select start and end dates');return;}
+    document.getElementById('statsContainer').innerHTML='<div class="loading">Loading stats...</div>';
+    apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`)
+      .then(displayStats)
+      .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
 
-        function displayStats(st) {
-          if (!st) {
-            return;
-          }
-          updateDeliveryRateDisplay(st.deliveryRate || 0);
-          const h = `
+  function displayStats(st){
+    if(!st){return;}
+    updateDeliveryRateDisplay(st.deliveryRate||0);
+    const h = `
       <div class="payout-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">📊 Stats Summary</h2>
         <div class="summary-grid">
@@ -1618,60 +686,47 @@
           <div class="summary-item"><div class="summary-label">Returned/Cancelled/Refused</div><div class="summary-value">${st.returned}</div></div>
           <div class="summary-item"><div class="summary-label">Collected</div><div class="summary-value">${formatMoney(st.totalCollect)} DH</div></div>
           <div class="summary-item"><div class="summary-label">Fees Earned</div><div class="summary-value">${formatMoney(st.totalFees)} DH</div></div>
-          <div class="summary-item"><div class="summary-label">Delivery Rate</div><div class="summary-value">${(st.deliveryRate || 0).toFixed(1)}%</div></div>
+          <div class="summary-item"><div class="summary-label">Delivery Rate</div><div class="summary-value">${(st.deliveryRate||0).toFixed(1)}%</div></div>
         </div>
       </div>`;
-          document.getElementById("statsContainer").innerHTML = h;
-        }
+    document.getElementById('statsContainer').innerHTML = h;
+  }
 
-        // Expose functions globally for inline handlers
-        Object.assign(window, {
-          showTab,
-          startScanner,
-          manualAdd,
-          loadOrders,
-          updateOrderStatus,
-          updateOrderNotes,
-          updateCashAmount,
-          updateScheduledTime,
-          loadFollowUps,
-          loadArchive,
-          filterOrders,
-          updateFollowLog,
-          loadPayouts,
-          markPayoutPaid,
-          loadStats,
-          loadStatsRange,
-          applyDefaultRange,
-          selectQuickRange,
-          recordCall,
-          recordWhatsapp,
-        });
+  // Expose functions globally for inline handlers
+  Object.assign(window, {
+    showTab,
+    startScanner,
+    manualAdd,
+    loadOrders,
+    updateOrderStatus,
+    updateOrderNotes,
+    updateCashAmount,
+    updateScheduledTime,
+    loadPayouts,
+    markPayoutPaid,
+    loadStats,
+    loadStatsRange,
+    applyDefaultRange,
+    selectQuickRange,
+    recordCall,
+    recordWhatsapp
+  });
 
-        /* ─────────────────────────────────────────────────────────────
+  /* ─────────────────────────────────────────────────────────────
      9.  Helper – tag mapping  (unchanged)
      ────────────────────────────────────────────────────────────*/
-        function getPrimaryTag(t) {
-          const l = (t || "").toLowerCase();
-          return l.includes("ch")
-            ? "ch"
-            : l.includes("big")
-              ? "big"
-              : l.includes("k")
-                ? "k"
-                : l.includes("12livery")
-                  ? "12livery"
-                  : l.includes("12livrey")
-                    ? "12livrey"
-                    : l.includes("fast")
-                      ? "fast"
-                      : l.includes("oscario")
-                        ? "oscario"
-                        : l.includes("sand")
-                          ? "sand"
-                          : "";
-        }
-      });
-    </script>
-  </body>
+  function getPrimaryTag(t){
+    const l=(t||'').toLowerCase();
+    return l.includes('ch')?'ch':
+           l.includes('big')?'big':
+           l.includes('k')?'k':
+           l.includes('12livery')?'12livery':
+           l.includes('12livrey')?'12livrey':
+           l.includes('fast')?'fast':
+           l.includes('oscario')?'oscario':
+           l.includes('sand')?'sand':'';
+  }
+  });
+  </script>
+</body>
 </html>
