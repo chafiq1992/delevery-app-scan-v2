@@ -10,7 +10,9 @@ delivery-app FastAPI backend
 
 Déployé sur Render via the Dockerfile you created earlier.
 """
+
 from dotenv import load_dotenv
+
 load_dotenv()
 import os
 import datetime as dt
@@ -51,24 +53,31 @@ SHOPIFY_STORES = [
 ]
 
 
-DELIVERY_STATUSES   = [
-    "Dispatched", "Livré", "En cours",
-    "Pas de réponse 1", "Pas de réponse 2", "Pas de réponse 3",
-    "Annulé", "Refusé", "Rescheduled", "Returned"
+DELIVERY_STATUSES = [
+    "Dispatched",
+    "Livré",
+    "En cours",
+    "Pas de réponse 1",
+    "Pas de réponse 2",
+    "Pas de réponse 3",
+    "Annulé",
+    "Refusé",
+    "Rescheduled",
+    "Returned",
 ]
-COMPLETED_STATUSES  = ["Livré", "Annulé", "Refusé", "Returned"]
+COMPLETED_STATUSES = ["Livré", "Annulé", "Refusé", "Returned"]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
-
-
 
 
 # ───────────────────────────────────────────────────────────────
 # Pydantic models
 # ───────────────────────────────────────────────────────────────
 
+
 class ScanIn(BaseModel):
     barcode: str
+
 
 class ScanResult(BaseModel):
     result: str
@@ -79,7 +88,7 @@ class ScanResult(BaseModel):
 
 class StatusUpdate(BaseModel):
     order_name: str
-    new_status: Optional[str] = None   # one of DELIVERY_STATUSES
+    new_status: Optional[str] = None  # one of DELIVERY_STATUSES
     note: Optional[str] = None
     cash_amount: Optional[float] = None
     scheduled_time: Optional[str] = None
@@ -107,6 +116,7 @@ app = FastAPI(title="Delivery FastAPI backend")
 async def startup_event():
     await init_db()
 
+
 # ✅ Define the path correctly
 static_path = os.path.join(os.path.dirname(__file__), "static")
 
@@ -114,9 +124,11 @@ static_path = os.path.join(os.path.dirname(__file__), "static")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+
 async def load_drivers(session):
     result = await session.execute(select(Driver))
     return {d.id: d for d in result.scalars()}
+
 
 # Simple admin password (override via env var)
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
@@ -126,6 +138,9 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 orders_cache = TTLCache(maxsize=8, ttl=60)
 payouts_cache = TTLCache(maxsize=8, ttl=60)
 orders_data_cache = TTLCache(maxsize=8, ttl=60)
+archive_cache = TTLCache(maxsize=8, ttl=60)
+followups_cache = TTLCache(maxsize=8, ttl=60)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def show_login():
@@ -142,12 +157,15 @@ async def show_follow_login():
     """Serve login page for follow agents."""
     return FileResponse(os.path.join(STATIC_DIR, "follow_login.html"))
 
+
 @app.post("/login", response_class=HTMLResponse)
 async def login(driver_id: str = Form(...)):
     async for session in get_session():
         drivers = await load_drivers(session)
         if driver_id in drivers:
-            response = RedirectResponse(url=f"/static/index.html?driver={driver_id}", status_code=302)
+            response = RedirectResponse(
+                url=f"/static/index.html?driver={driver_id}", status_code=302
+            )
             return response
     return HTMLResponse("<h2>Invalid driver ID</h2>", status_code=401)
 
@@ -165,6 +183,7 @@ async def follow_login(password: str = Form(...)):
     if password == ADMIN_PASSWORD:
         return {"success": True}
     raise HTTPException(status_code=401, detail="Invalid follow password")
+
 
 @app.get("/drivers")
 async def list_drivers():
@@ -186,7 +205,9 @@ app.add_middleware(
 # Utility functions – exact ports of your Apps Script logic
 # ───────────────────────────────────────────────────────────────
 def calculate_driver_fee(tags: str) -> int:
-    return EXCHANGE_DELIVERY_FEE if "ch" in (tags or "").lower() else NORMAL_DELIVERY_FEE
+    return (
+        EXCHANGE_DELIVERY_FEE if "ch" in (tags or "").lower() else NORMAL_DELIVERY_FEE
+    )
 
 
 def get_primary_display_tag(tags: str) -> str:
@@ -253,40 +274,70 @@ def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
 # Core functions – Database logic
 # ───────────────────────────────────────────────────────────────
 ORDER_HEADER = [
-    "Timestamp", "Order Name", "Customer Name", "Customer Phone",
-    "Address", "Tags", "Fulfillment", "Order Status",
-    "Store", "Delivery Status", "Notes", "Scheduled Time", "Scan Date",
-    "Cash Amount", "Driver Fee", "Payout ID", "Status Log", "Comm Log"
+    "Timestamp",
+    "Order Name",
+    "Customer Name",
+    "Customer Phone",
+    "Address",
+    "Tags",
+    "Fulfillment",
+    "Order Status",
+    "Store",
+    "Delivery Status",
+    "Notes",
+    "Scheduled Time",
+    "Scan Date",
+    "Cash Amount",
+    "Driver Fee",
+    "Payout ID",
+    "Status Log",
+    "Comm Log",
 ]
 
 PAYOUT_HEADER = [
-    "Payout ID", "Date Created", "Orders", "Total Cash",
-    "Total Fees", "Total Payout", "Status", "Date Paid"
+    "Payout ID",
+    "Date Created",
+    "Orders",
+    "Total Cash",
+    "Total Fees",
+    "Total Payout",
+    "Status",
+    "Date Paid",
 ]
 
-EMPLOYEE_HEADER = [
-    "Timestamp", "Employee", "Order Number", "Amount"
-]
+EMPLOYEE_HEADER = ["Timestamp", "Employee", "Order Number", "Amount"]
 
 
 async def order_exists(session: AsyncSession, driver_id: str, order_name: str) -> bool:
     result = await session.scalar(
-        select(Order).where(Order.driver_id == driver_id, Order.order_name == order_name)
+        select(Order).where(
+            Order.driver_id == driver_id, Order.order_name == order_name
+        )
     )
     return result is not None
 
 
-async def get_order_row(session: AsyncSession, driver_id: str, order_name: str) -> Optional[Order]:
+async def get_order_row(
+    session: AsyncSession, driver_id: str, order_name: str
+) -> Optional[Order]:
     return await session.scalar(
-        select(Order).where(Order.driver_id == driver_id, Order.order_name == order_name)
+        select(Order).where(
+            Order.driver_id == driver_id, Order.order_name == order_name
+        )
     )
 
 
-async def add_to_payout(session: AsyncSession, driver_id: str, order_name: str,
-                        cash_amount: float, driver_fee: float) -> str:
+async def add_to_payout(
+    session: AsyncSession,
+    driver_id: str,
+    order_name: str,
+    cash_amount: float,
+    driver_fee: float,
+) -> str:
     """Create (or extend) an open payout row and write payout ID back to order."""
     payout = await session.scalar(
-        select(Payout).where(Payout.driver_id == driver_id, Payout.status != 'paid')
+        select(Payout)
+        .where(Payout.driver_id == driver_id, Payout.status != "paid")
         .order_by(Payout.date_created.desc())
     )
     if not payout:
@@ -298,13 +349,13 @@ async def add_to_payout(session: AsyncSession, driver_id: str, order_name: str,
             total_cash=cash_amount,
             total_fees=driver_fee,
             total_payout=cash_amount - driver_fee,
-            status='pending'
+            status="pending",
         )
         session.add(payout)
     else:
-        orders_list = [o.strip() for o in (payout.orders or '').split(',') if o.strip()]
+        orders_list = [o.strip() for o in (payout.orders or "").split(",") if o.strip()]
         orders_list.append(order_name)
-        payout.orders = ', '.join(orders_list)
+        payout.orders = ", ".join(orders_list)
         payout.total_cash = (payout.total_cash or 0) + cash_amount
         payout.total_fees = (payout.total_fees or 0) + driver_fee
         payout.total_payout = payout.total_cash - payout.total_fees
@@ -314,18 +365,23 @@ async def add_to_payout(session: AsyncSession, driver_id: str, order_name: str,
     return payout_id
 
 
-async def remove_from_payout(session: AsyncSession, payout_id: str, order_name: str,
-                             cash_amount: float, driver_fee: float) -> None:
+async def remove_from_payout(
+    session: AsyncSession,
+    payout_id: str,
+    order_name: str,
+    cash_amount: float,
+    driver_fee: float,
+) -> None:
     payout = await session.scalar(select(Payout).where(Payout.payout_id == payout_id))
     if not payout:
         return
 
-    orders_list = [o.strip() for o in (payout.orders or '').split(',') if o.strip()]
+    orders_list = [o.strip() for o in (payout.orders or "").split(",") if o.strip()]
     if order_name not in orders_list:
         return
 
     orders_list.remove(order_name)
-    payout.orders = ', '.join(orders_list)
+    payout.orders = ", ".join(orders_list)
     payout.total_cash = (payout.total_cash or 0) - cash_amount
     payout.total_fees = (payout.total_fees or 0) - driver_fee
     payout.total_payout = payout.total_cash - payout.total_fees
@@ -337,21 +393,23 @@ async def remove_from_payout(session: AsyncSession, payout_id: str, order_name: 
 # FastAPI ROUTES
 # ───────────────────────────────────────────────────────────────
 
+
 async def get_driver(session, driver_id: str) -> Driver:
     result = await session.get(Driver, driver_id)
     if not result:
         raise HTTPException(status_code=400, detail="Invalid driver")
     return result
 
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok", "time": dt.datetime.utcnow().isoformat()}
 
+
 # -------------------------------  SCAN  -------------------------------
 @app.post("/scan", response_model=ScanResult, tags=["orders"])
 async def scan(
-    payload: ScanIn,
-    driver: str = Query(..., description="driver1 / driver2 / …")
+    payload: ScanIn, driver: str = Query(..., description="driver1 / driver2 / …")
 ):
     async for session in get_session():
         await get_driver(session, driver)
@@ -381,39 +439,57 @@ async def scan(
                 )
                 if created_at >= window_start and (
                     not chosen_order
-                    or created_at > dt.datetime.fromisoformat(
+                    or created_at
+                    > dt.datetime.fromisoformat(
                         chosen_order["created_at"].replace("Z", "+00:00")
                     )
                 ):
                     chosen_order, chosen_store_name = order, store["name"]
-    
+
         tags = chosen_order.get("tags", "") if chosen_order else ""
-        fulfillment = chosen_order.get("fulfillment_status", "unfulfilled") if chosen_order else ""
-        order_status = "closed" if (chosen_order and chosen_order.get("cancelled_at")) else "open"
+        fulfillment = (
+            chosen_order.get("fulfillment_status", "unfulfilled")
+            if chosen_order
+            else ""
+        )
+        order_status = (
+            "closed" if (chosen_order and chosen_order.get("cancelled_at")) else "open"
+        )
         customer_name = phone = address = ""
         cash_amount = 0.0
         result_msg = "❌ Not found"
-    
+
         if chosen_order:
             result_msg = (
-                "⚠️ Cancelled" if chosen_order.get("cancelled_at")
-                else "❌ Unfulfilled" if fulfillment != "fulfilled"
-                else "✅ OK"
+                "⚠️ Cancelled"
+                if chosen_order.get("cancelled_at")
+                else "❌ Unfulfilled" if fulfillment != "fulfilled" else "✅ OK"
             )
-            cash_amount = float(chosen_order.get("total_outstanding") or chosen_order.get("total_price") or 0)
+            cash_amount = float(
+                chosen_order.get("total_outstanding")
+                or chosen_order.get("total_price")
+                or 0
+            )
             if chosen_order.get("shipping_address"):
                 sa = chosen_order["shipping_address"]
                 customer_name = sa.get("name", "")
                 phone = sa.get("phone", "") or chosen_order.get("phone", "")
-                address = ", ".join(filter(None, [
-                    sa.get("address1"), sa.get("address2"),
-                    sa.get("city"), sa.get("province")
-                ]))
-    
-        now_ts   = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                address = ", ".join(
+                    filter(
+                        None,
+                        [
+                            sa.get("address1"),
+                            sa.get("address2"),
+                            sa.get("city"),
+                            sa.get("province"),
+                        ],
+                    )
+                )
+
+        now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         scan_day = dt.datetime.now().strftime("%Y-%m-%d")
         driver_fee = calculate_driver_fee(tags)
-    
+
         order = Order(
             driver_id=driver,
             timestamp=dt.datetime.strptime(now_ts, "%Y-%m-%d %H:%M:%S"),
@@ -435,13 +511,14 @@ async def scan(
         )
         session.add(order)
         await session.commit()
-    
+
         return ScanResult(
             result=result_msg,
             order=order_number,
             tag=get_primary_display_tag(tags),
             deliveryStatus="Dispatched",
         )
+
 
 # -----------------------------  ORDERS  -------------------------------
 @app.get("/orders", tags=["orders"])
@@ -454,31 +531,34 @@ async def list_active_orders(driver: str = Query(...)):
         result = await session.execute(
             select(Order).where(
                 Order.driver_id == driver,
-                Order.delivery_status.not_in(COMPLETED_STATUSES)
+                Order.delivery_status.not_in(COMPLETED_STATUSES),
             )
         )
         rows = result.scalars().all()
 
         active = []
         for o in rows:
-            active.append({
-                "timestamp":    o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                "orderName":    o.order_name,
-                "customerName": o.customer_name,
-                "customerPhone":o.customer_phone,
-                "address":      o.address,
-                "tags":         o.tags,
-                "deliveryStatus": o.delivery_status or "Dispatched",
-                "notes":        o.notes,
-                "scheduledTime": o.scheduled_time,
-                "scanDate":     o.scan_date,
-                "cashAmount":   o.cash_amount or 0,
-                "driverFee":    o.driver_fee or 0,
-                "payoutId":     o.payout_id,
-                "statusLog":    o.status_log,
-                "commLog":      o.comm_log,
-                "followLog":   o.follow_log,
-            })
+            active.append(
+                {
+                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "orderName": o.order_name,
+                    "customerName": o.customer_name,
+                    "customerPhone": o.customer_phone,
+                    "address": o.address,
+                    "tags": o.tags,
+                    "deliveryStatus": o.delivery_status or "Dispatched",
+                    "notes": o.notes,
+                    "scheduledTime": o.scheduled_time,
+                    "scanDate": o.scan_date,
+                    "cashAmount": o.cash_amount or 0,
+                    "driverFee": o.driver_fee or 0,
+                    "payoutId": o.payout_id,
+                    "statusLog": o.status_log,
+                    "commLog": o.comm_log,
+                    "followLog": o.follow_log,
+                }
+            )
+
     def sort_key(o):
         if o["scheduledTime"]:
             try:
@@ -503,11 +583,119 @@ async def list_active_orders(driver: str = Query(...)):
     orders_cache[driver] = active
     return active
 
+
+@app.get("/orders/archive", tags=["orders"])
+async def list_archived_orders(driver: str = Query(...)):
+    if driver in archive_cache:
+        return archive_cache[driver]
+
+    async for session in get_session():
+        await get_driver(session, driver)
+        result = await session.execute(
+            select(Order)
+            .where(
+                Order.driver_id == driver,
+                Order.delivery_status.in_(COMPLETED_STATUSES),
+            )
+            .order_by(Order.timestamp.desc())
+        )
+        rows = result.scalars().all()
+
+        archived = []
+        for o in rows:
+            archived.append(
+                {
+                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "orderName": o.order_name,
+                    "customerName": o.customer_name,
+                    "customerPhone": o.customer_phone,
+                    "address": o.address,
+                    "tags": o.tags,
+                    "deliveryStatus": o.delivery_status or "Dispatched",
+                    "notes": o.notes,
+                    "scheduledTime": o.scheduled_time,
+                    "scanDate": o.scan_date,
+                    "cashAmount": o.cash_amount or 0,
+                    "driverFee": o.driver_fee or 0,
+                    "payoutId": o.payout_id,
+                    "statusLog": o.status_log,
+                    "commLog": o.comm_log,
+                    "followLog": o.follow_log,
+                }
+            )
+
+    archive_cache[driver] = archived
+    return archived
+
+
+@app.get("/orders/followups", tags=["orders"])
+async def list_followup_orders(driver: str = Query(...)):
+    if driver in followups_cache:
+        return followups_cache[driver]
+
+    async for session in get_session():
+        await get_driver(session, driver)
+        result = await session.execute(
+            select(Order).where(
+                Order.driver_id == driver,
+                Order.delivery_status.not_in(COMPLETED_STATUSES),
+            )
+        )
+        rows = result.scalars().all()
+
+        followups = []
+        now = dt.datetime.now(timezone.utc)
+        for o in rows:
+            last_update = o.timestamp
+            if o.status_log:
+                try:
+                    ts_str = o.status_log.strip().split("|")[-1].split("@")[-1].strip()
+                    last_update = parse_timestamp(ts_str)
+                except Exception:
+                    pass
+
+            overdue = False
+            if o.scheduled_time:
+                try:
+                    st = parse_timestamp(o.scheduled_time)
+                    overdue = st <= now
+                except Exception:
+                    overdue = False
+
+            if (
+                overdue
+                or (now - last_update).total_seconds() > 8 * 3600
+                or o.delivery_status in ["Pas de réponse 3", "Rescheduled"]
+            ):
+                followups.append(
+                    {
+                        "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                        "orderName": o.order_name,
+                        "customerName": o.customer_name,
+                        "customerPhone": o.customer_phone,
+                        "address": o.address,
+                        "tags": o.tags,
+                        "deliveryStatus": o.delivery_status or "Dispatched",
+                        "notes": o.notes,
+                        "scheduledTime": o.scheduled_time,
+                        "scanDate": o.scan_date,
+                        "cashAmount": o.cash_amount or 0,
+                        "driverFee": o.driver_fee or 0,
+                        "payoutId": o.payout_id,
+                        "statusLog": o.status_log,
+                        "commLog": o.comm_log,
+                        "followLog": o.follow_log,
+                        "urgent": overdue,
+                    }
+                )
+
+    followups_cache[driver] = followups
+    return followups
+
+
 @app.put("/order/status", tags=["orders"])
 async def update_order_status(
-    payload: StatusUpdate,
-    bg: BackgroundTasks,
-    driver: str = Query(...)
+    payload: StatusUpdate, bg: BackgroundTasks, driver: str = Query(...)
 ):
     if payload.new_status and payload.new_status not in DELIVERY_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
@@ -523,7 +711,9 @@ async def update_order_status(
         if payload.new_status:
             order.delivery_status = payload.new_status
             ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            order.status_log = ((order.status_log or "") + f" | {payload.new_status} @ {ts}").strip(" |")
+            order.status_log = (
+                (order.status_log or "") + f" | {payload.new_status} @ {ts}"
+            ).strip(" |")
         if payload.note is not None:
             order.notes = payload.note
         if payload.scheduled_time is not None:
@@ -538,13 +728,25 @@ async def update_order_status(
         if payload.new_status == "Livré" and prev_status != "Livré":
             driver_fee = calculate_driver_fee(order.tags)
             cash_amt = payload.cash_amount or (order.cash_amount or 0)
-            payout_id = await add_to_payout(session, driver, payload.order_name, cash_amt, driver_fee)
+            payout_id = await add_to_payout(
+                session, driver, payload.order_name, cash_amt, driver_fee
+            )
             order.payout_id = payout_id
             order.driver_fee = driver_fee
-        elif payload.new_status and payload.new_status != "Livré" and prev_status == "Livré":
+        elif (
+            payload.new_status
+            and payload.new_status != "Livré"
+            and prev_status == "Livré"
+        ):
             driver_fee = order.driver_fee or 0
-            cash_amt = payload.cash_amount if payload.cash_amount is not None else (order.cash_amount or 0)
-            await remove_from_payout(session, order.payout_id, payload.order_name, cash_amt, driver_fee)
+            cash_amt = (
+                payload.cash_amount
+                if payload.cash_amount is not None
+                else (order.cash_amount or 0)
+            )
+            await remove_from_payout(
+                session, order.payout_id, payload.order_name, cash_amt, driver_fee
+            )
             order.payout_id = None
 
         await session.commit()
@@ -552,6 +754,7 @@ async def update_order_status(
         orders_cache.pop(driver, None)
         payouts_cache.pop(driver, None)
         return {"success": True}
+
 
 # ----------------------------  PAYOUTS  -------------------------------
 @app.get("/payouts", tags=["payouts"])
@@ -562,52 +765,67 @@ async def get_payouts(driver: str = Query(...)):
     async for session in get_session():
         await get_driver(session, driver)
         result = await session.execute(
-            select(Payout).where(Payout.driver_id == driver).order_by(Payout.date_created.desc())
+            select(Payout)
+            .where(Payout.driver_id == driver)
+            .order_by(Payout.date_created.desc())
         )
         rows = result.scalars().all()
         payouts = []
         for p in rows:
-            orders_list = [o.strip() for o in (p.orders or '').split(',') if o.strip()]
+            orders_list = [o.strip() for o in (p.orders or "").split(",") if o.strip()]
             order_details = []
             for name in orders_list:
                 order = await session.scalar(
-                    select(Order).where(Order.driver_id == driver, Order.order_name == name)
+                    select(Order).where(
+                        Order.driver_id == driver, Order.order_name == name
+                    )
                 )
                 if order:
-                    order_details.append({
-                        "name": name,
-                        "cashAmount": order.cash_amount or 0,
-                        "driverFee": order.driver_fee or 0,
-                    })
+                    order_details.append(
+                        {
+                            "name": name,
+                            "cashAmount": order.cash_amount or 0,
+                            "driverFee": order.driver_fee or 0,
+                        }
+                    )
                 else:
-                    order_details.append({"name": name, "cashAmount": 0.0, "driverFee": 0.0})
+                    order_details.append(
+                        {"name": name, "cashAmount": 0.0, "driverFee": 0.0}
+                    )
 
-            payouts.append({
-                "payoutId":   p.payout_id,
-                "dateCreated": p.date_created.strftime("%Y-%m-%d %H:%M:%S"),
-                "orders":     p.orders,
-                "totalCash":  p.total_cash or 0,
-                "totalFees":  p.total_fees or 0,
-                "totalPayout":p.total_payout or 0,
-                "status":     p.status or "pending",
-                "datePaid":   p.date_paid.strftime("%Y-%m-%d %H:%M:%S") if p.date_paid else "",
-                "orderDetails": order_details,
-            })
+            payouts.append(
+                {
+                    "payoutId": p.payout_id,
+                    "dateCreated": p.date_created.strftime("%Y-%m-%d %H:%M:%S"),
+                    "orders": p.orders,
+                    "totalCash": p.total_cash or 0,
+                    "totalFees": p.total_fees or 0,
+                    "totalPayout": p.total_payout or 0,
+                    "status": p.status or "pending",
+                    "datePaid": (
+                        p.date_paid.strftime("%Y-%m-%d %H:%M:%S") if p.date_paid else ""
+                    ),
+                    "orderDetails": order_details,
+                }
+            )
 
         payouts_cache[driver] = payouts
         return payouts
+
 
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
 async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
     async for session in get_session():
         await get_driver(session, driver)
         payout = await session.scalar(
-            select(Payout).where(Payout.driver_id == driver, Payout.payout_id == payout_id)
+            select(Payout).where(
+                Payout.driver_id == driver, Payout.payout_id == payout_id
+            )
         )
         if not payout:
             raise HTTPException(status_code=404, detail="Payout not found")
 
-        payout.status = 'paid'
+        payout.status = "paid"
         payout.date_paid = dt.datetime.utcnow()
         await session.commit()
 
@@ -617,10 +835,13 @@ async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
 
 
 # ----------------------------  STATS  -------------------------------
-async def _compute_stats(session: AsyncSession, driver: str,
-                         days: int | None = None,
-                         start: str | None = None,
-                         end: str | None = None) -> dict:
+async def _compute_stats(
+    session: AsyncSession,
+    driver: str,
+    days: int | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict:
     await get_driver(session, driver)
     q = select(Order).where(Order.driver_id == driver)
 
@@ -655,7 +876,11 @@ async def _compute_stats(session: AsyncSession, driver: str,
     for o in rows:
         sd = None
         try:
-            sd = dt.datetime.strptime(o.scan_date, "%Y-%m-%d").date() if o.scan_date else None
+            sd = (
+                dt.datetime.strptime(o.scan_date, "%Y-%m-%d").date()
+                if o.scan_date
+                else None
+            )
         except Exception:
             sd = None
         if start_date and (not sd or sd < start_date):
@@ -744,7 +969,9 @@ async def admin_trends(
         drivers = await load_drivers(session)
         counts: dict[dt.date, int] = {}
         for driver in drivers.keys():
-            q = select(Order).where(Order.driver_id == driver, Order.delivery_status == "Livré")
+            q = select(Order).where(
+                Order.driver_id == driver, Order.delivery_status == "Livré"
+            )
             if start_date:
                 q = q.where(Order.scan_date >= start_date.strftime("%Y-%m-%d"))
             if end_date:
@@ -752,7 +979,11 @@ async def admin_trends(
             result = await session.execute(q)
             for o in result.scalars():
                 try:
-                    sd = dt.datetime.strptime(o.scan_date, "%Y-%m-%d").date() if o.scan_date else None
+                    sd = (
+                        dt.datetime.strptime(o.scan_date, "%Y-%m-%d").date()
+                        if o.scan_date
+                        else None
+                    )
                 except Exception:
                     continue
                 if not sd:
@@ -779,24 +1010,26 @@ async def admin_search(q: str = Query(...)):
                     Order.driver_id == driver,
                     or_(
                         Order.order_name.ilike(f"%{q_lower}%"),
-                        Order.customer_phone.ilike(f"%{q_lower}%")
-                    )
+                        Order.customer_phone.ilike(f"%{q_lower}%"),
+                    ),
                 )
             )
             for o in result.scalars():
-                results.append({
-                    "driver": driver,
-                    "orderName": o.order_name,
-                    "customerName": o.customer_name,
-                    "customerPhone": o.customer_phone,
-                    "deliveryStatus": o.delivery_status or "Dispatched",
-                    "cashAmount": o.cash_amount or 0,
-                    "address": o.address,
-                    "scheduledTime": o.scheduled_time,
-                    "notes": o.notes,
-                    "followLog": o.follow_log,
-                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                })
+                results.append(
+                    {
+                        "driver": driver,
+                        "orderName": o.order_name,
+                        "customerName": o.customer_name,
+                        "customerPhone": o.customer_phone,
+                        "deliveryStatus": o.delivery_status or "Dispatched",
+                        "cashAmount": o.cash_amount or 0,
+                        "address": o.address,
+                        "scheduledTime": o.scheduled_time,
+                        "notes": o.notes,
+                        "followLog": o.follow_log,
+                        "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                )
         return results
 
 
@@ -820,13 +1053,17 @@ async def employee_log(entry: EmployeeLog):
 async def employee_logs():
     """Return all employee log rows as a list of dictionaries."""
     async for session in get_session():
-        result = await session.execute(select(EmployeeLog).order_by(EmployeeLog.timestamp.desc()))
+        result = await session.execute(
+            select(EmployeeLog).order_by(EmployeeLog.timestamp.desc())
+        )
         logs = []
         for r in result.scalars():
-            logs.append({
-                "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                "employee": r.employee,
-                "order": r.order,
-                "amount": r.amount,
-            })
+            logs.append(
+                {
+                    "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "employee": r.employee,
+                    "order": r.order,
+                    "amount": r.amount,
+                }
+            )
         return logs

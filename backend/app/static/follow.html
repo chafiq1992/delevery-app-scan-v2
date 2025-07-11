@@ -16,17 +16,36 @@
     textarea,select,input{margin-top:0.3rem;padding:0.4rem;border:1px solid #ccc;border-radius:6px;width:100%}
     .follow-log{background:#f5f5f5}
     .comm-log{white-space:pre-line;font-size:0.85rem;color:#555;margin-top:0.3rem}
+    .order-card.followup{border-left:4px solid #f44336}
+    .urgent-icon{color:#f44336;font-size:1.1rem;margin-left:0.3rem}
+    .status-select{margin-top:0.3rem;padding:0.4rem;border:1px solid #ccc;border-radius:6px;width:100%}
+    .status-log{background:#f9f9f9;padding:0.4rem;margin-top:0.3rem;font-size:0.85rem;white-space:pre-line}
+    .tag-badge{display:inline-block;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.75rem;margin-left:0.3rem}
+    .tag-k{background:#ffc0cb;color:#333}
+    .tag-big{background:#fff176;color:#333}
+    .tag-12livery,.tag-12livrey{background:#a5d6a7;color:#333}
+    .tag-fast{background:#90caf9;color:#333}
+    .tag-oscario{background:#40e0d0;color:#333}
+    .tag-sand{background:#ffcc80;color:#333}
+    .tag-ch{background:#ffab91;color:#333}
   </style>
 </head>
 <body>
   <div class="tabs">
     <button onclick="showTab('orders')">Orders</button>
+    <button onclick="showTab('followups')">Follow Ups</button>
+    <button onclick="showTab('archive')">Archive</button>
     <button onclick="showTab('payouts')">Payouts</button>
   </div>
   <div id="orders" class="tab-content active">
-    <input id="searchInput" type="text" placeholder="Search orders" style="padding:0.4rem;width:100%;margin-bottom:1rem;border:1px solid #ccc;border-radius:6px" oninput="applySearch()">
+    <input id="searchInput" type="text" placeholder="Search orders" style="padding:0.4rem;width:100%;margin-bottom:0.5rem;border:1px solid #ccc;border-radius:6px" oninput="applySearch()">
+    <select id="statusFilter" style="margin-bottom:1rem" onchange="applyFilter()">
+      <option value="">All Statuses</option>
+    </select>
     <div id="ordersContainer"></div>
   </div>
+  <div id="followups" class="tab-content"></div>
+  <div id="archive" class="tab-content"></div>
   <div id="payouts" class="tab-content"></div>
 <script>
 const API=window.location.origin.replace(/\/$/,'');
@@ -34,14 +53,26 @@ const headers={'Content-Type':'application/json'};
 const apiGet=p=>fetch(API+p).then(r=>r.json());
 const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(r=>r.json());
 
-function showTab(t){document.querySelectorAll('.tab-content').forEach(d=>d.classList.remove('active'));document.getElementById(t).classList.add('active');}
+const deliveryStatuses=['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
+const statusColors={'Livré':'#4caf50','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336'};
 
-let ordersData={};
+function showTab(t){
+  document.querySelectorAll('.tab-content').forEach(d=>d.classList.remove('active'));
+  document.getElementById(t).classList.add('active');
+  if(t==='orders') renderOrders();
+  if(t==='followups') renderFollowups();
+  if(t==='archive') renderArchive();
+}
+
+let ordersData={},followupData={},archiveData={},driversCache=[];
 
 async function loadAll(){
-  const drivers=await apiGet('/drivers');
-  await loadOrders(drivers);
-  loadPayouts(drivers);
+  driversCache=await apiGet('/drivers');
+  await loadOrders(driversCache);
+  await loadFollowups(driversCache);
+  await loadArchive(driversCache);
+  loadPayouts(driversCache);
+  populateStatusFilter();
 }
 
 async function loadOrders(drivers){
@@ -53,44 +84,83 @@ async function loadOrders(drivers){
   renderOrders();
 }
 
-function renderOrders(){
+async function loadFollowups(drivers){
+  followupData={};
+  for(const d of drivers){
+    const fl=await apiGet(`/orders/followups?driver=${d}`).catch(()=>[]);
+    followupData[d]=fl;
+  }
+  renderFollowups();
+}
+
+async function loadArchive(drivers){
+  archiveData={};
+  for(const d of drivers){
+    const ar=await apiGet(`/orders/archive?driver=${d}`).catch(()=>[]);
+    archiveData[d]=ar;
+  }
+  renderArchive();
+}
+
+function populateStatusFilter(){
+  const sel=document.getElementById('statusFilter');
+  if(!sel) return;
+  sel.innerHTML='<option value="">All Statuses</option>';
+  deliveryStatuses.forEach(s=>{
+    const o=document.createElement('option');
+    o.value=s; o.textContent=s; sel.appendChild(o);
+  });
+}
+
+
+function renderSection(dataObj,container,includeInputs){
   const filter=(document.getElementById('searchInput').value||'').toLowerCase();
-  const container=document.getElementById('ordersContainer');
+  const status=document.getElementById('statusFilter').value||'';
   container.innerHTML='';
-  for(const [d,orders] of Object.entries(ordersData)){
+  for(const [d,orders] of Object.entries(dataObj)){
     const filtered=orders.filter(o=>{
       const phone=(o.customerPhone||'').toLowerCase();
       const name=(o.customerName||'').toLowerCase();
       const order=o.orderName.toLowerCase();
-      return !filter||order.includes(filter)||phone.includes(filter)||name.includes(filter);
+      const matchesText=!filter||order.includes(filter)||phone.includes(filter)||name.includes(filter);
+      const matchesStatus=!status||o.deliveryStatus===status;
+      return matchesText&&matchesStatus;
     });
     if(!filtered.length) continue;
     let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
     filtered.forEach(o=>{
       const key=`${d}_${o.orderName}`;
+      const border=statusColors[o.deliveryStatus]||'#004aad';
       const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
-      html+=`<div class="order-card">
-        <div class="order-header">${o.orderName}<span style="font-size:0.9rem">${o.deliveryStatus}</span></div>
+      html+=`<div class="order-card ${o.urgent?'followup':''}" style="border-left-color:${border}">
+        <div class="order-header">${o.orderName}${o.urgent?'<span class="urgent-icon">🔔</span>':''}<span style="font-size:0.9rem">${o.deliveryStatus}</span></div>
         <div>${o.customerName||''}</div>
         <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
         <div>${o.address||''}</div>
         <div>Timestamp: ${o.timestamp}</div>
-        ${o.notes?`<div class="driver-notes">Driver: ${o.notes}</div>`:''}
-        <select onchange="updateOrderStatus('${d}','${o.orderName}',this.value)">
-          ${['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'].map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
-        </select>
-        <input type="datetime-local" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${d}','${o.orderName}',this.value)">
-        <input type="number" value="${o.cashAmount||''}" placeholder="Cash" onchange="updateCash('${d}','${o.orderName}',this.value)">
-        <textarea placeholder="Notes to driver" onchange="updateNotes('${d}','${o.orderName}',this.value)">${o.notes||''}</textarea>
-        <textarea class="follow-log" placeholder="Follow log" onchange="updateFollow('${d}','${o.orderName}',this.value)">${o.followLog||''}</textarea>
-        <div id="comm-${key}" class="comm-log"></div>
-      </div>`;
+        ${o.notes?`<div class="driver-notes">Driver: ${o.notes}</div>`:''}`;
+      if(includeInputs){
+        html+=`<select class="status-select" onchange="updateOrderStatus('${d}','${o.orderName}',this.value)">`+
+        deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')+
+        `</select>`+
+        `<input type="datetime-local" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${d}','${o.orderName}',this.value)">`+
+        `<input type="number" value="${o.cashAmount||''}" placeholder="Cash" onchange="updateCash('${d}','${o.orderName}',this.value)">`+
+        `<textarea placeholder="Notes to driver" onchange="updateNotes('${d}','${o.orderName}',this.value)">${o.notes||''}</textarea>`;
+      }
+      html+=`<textarea class="follow-log" placeholder="Follow log" onchange="updateFollow('${d}','${o.orderName}',this.value)">${o.followLog||''}</textarea>`+
+        `<div id="comm-${key}" class="comm-log"></div>`+
+        `${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}`+
+      `</div>`;
     });
     html+='</div>';
     container.innerHTML+=html;
     filtered.forEach(o=>displayCommunicationLog(`${d}_${o.orderName}`));
   }
 }
+
+function renderOrders(){renderSection(ordersData,document.getElementById('ordersContainer'),true);}
+function renderFollowups(){renderSection(followupData,document.getElementById('followups'),true);}
+function renderArchive(){renderSection(archiveData,document.getElementById('archive'),false);}
 
 async function loadPayouts(drivers){
   const container=document.getElementById('payouts');
@@ -121,6 +191,14 @@ function updateFollow(driver,order,log){apiPut(`/order/status?driver=${driver}`,
 
 function applySearch(){
   renderOrders();
+  renderFollowups();
+  renderArchive();
+}
+
+function applyFilter(){
+  renderOrders();
+  renderFollowups();
+  renderArchive();
 }
 
 function getCommLog(key){try{return JSON.parse(localStorage.getItem('log_'+key)||'{}');}catch(e){return {};}}
