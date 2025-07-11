@@ -18,7 +18,7 @@ import os
 import datetime as dt
 from typing import List, Optional
 from datetime import timezone
-import requests
+import httpx
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Form
@@ -256,16 +256,17 @@ def parse_timestamp(val: str) -> dt.datetime:
     return dt.datetime.fromisoformat(val)
 
 
-def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
-    """Call Shopify Admin API by order name (#1234)."""
+async def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
+    """Call Shopify Admin API by order name (#1234) using async HTTP."""
     auth = (store_cfg["api_key"], store_cfg["password"])
     url = f"https://{store_cfg['domain']}/admin/api/2023-07/orders.json"
     params = {"name": order_name}
-    r = requests.get(url, auth=auth, params=params, timeout=10)
-    try:
-        r.raise_for_status()
-    except requests.HTTPError:
-        return None
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            r = await client.get(url, auth=auth, params=params)
+            r.raise_for_status()
+        except httpx.HTTPError:
+            return None
     data = r.json()
     return data.get("orders", [{}])[0] if data.get("orders") else None
 
@@ -432,7 +433,7 @@ async def scan(
         window_start = dt.datetime.now(timezone.utc) - dt.timedelta(days=50)
         chosen_order, chosen_store_name = None, ""
         for store in SHOPIFY_STORES:
-            order = get_order_from_store(order_number, store)
+            order = await get_order_from_store(order_number, store)
             if order:
                 created_at = dt.datetime.fromisoformat(
                     order["created_at"].replace("Z", "+00:00")
