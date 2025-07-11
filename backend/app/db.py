@@ -42,6 +42,7 @@ class Order(Base):
     payout_id = Column(String)
     status_log = Column(Text)
     comm_log = Column(Text)
+    follow_log = Column(Text)
 
     driver = relationship("Driver")
 
