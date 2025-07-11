@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
 import os
@@ -71,3 +71,16 @@ class EmployeeLog(Base):
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
+        
+
+async def init_db() -> None:
+    """Create tables and ensure default drivers exist."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    default_drivers = ["abderrehman", "anouar", "mohammed", "nizar"]
+    async with AsyncSessionLocal() as session:
+        for d_id in default_drivers:
+            if not await session.get(Driver, d_id):
+                session.add(Driver(id=d_id))
+        await session.commit()
