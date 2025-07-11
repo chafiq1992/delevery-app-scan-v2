@@ -531,7 +531,7 @@ async def list_active_orders(driver: str = Query(...)):
         result = await session.execute(
             select(Order).where(
                 Order.driver_id == driver,
-                Order.delivery_status.not_in(COMPLETED_STATUSES),
+                Order.delivery_status.notin_(COMPLETED_STATUSES),
             )
         )
         rows = result.scalars().all()
@@ -638,7 +638,7 @@ async def list_followup_orders(driver: str = Query(...)):
         result = await session.execute(
             select(Order).where(
                 Order.driver_id == driver,
-                Order.delivery_status.not_in(COMPLETED_STATUSES),
+                Order.delivery_status.notin_(COMPLETED_STATUSES),
             )
         )
         rows = result.scalars().all()
