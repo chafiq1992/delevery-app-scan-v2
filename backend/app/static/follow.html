@@ -8,7 +8,7 @@
     :root{--bg:#f5f7fa;--text:#333;--card:#fff}
     body{font-family:sans-serif;background:var(--bg);color:var(--text);margin:0;padding:1rem;min-height:100vh}
     body.dark{--bg:#121212;--text:#eee;--card:#1e1e1e}
-    .tabs{display:flex;gap:1rem;margin-bottom:1rem}
+    .tabs{display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
     .tabs button{padding:0.5rem 1rem;border:none;background:#004aad;color:white;border-radius:6px;cursor:pointer}
     .tab-content{display:none}
     .tab-content.active{display:block}
@@ -33,9 +33,13 @@
     .tag-sand{background:#ffcc80;color:#333}
     .tag-ch{background:#ffab91;color:#333}
     .filters{position:sticky;top:0;background:var(--bg);padding-bottom:0.5rem;z-index:100}
+    #driverFilter{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem}
+    #driverFilter button{padding:0.3rem 0.6rem;border:none;border-radius:6px;color:#fff;cursor:pointer}
     .driver-log{background:#f5f5f5;padding:0.4rem;border-radius:6px;margin-top:0.3rem}
     .driver-log .log-item{display:flex;gap:0.3rem;align-items:center;font-size:0.85rem}
     .driver-log .log-time{color:#666}
+    .done-btn{margin-top:0.5rem;padding:0.6rem;border:none;border-radius:6px;background:#4caf50;color:#fff;font-size:1rem;width:100%;cursor:pointer}
+    .undone-btn{margin-top:0.5rem;padding:0.6rem;border:none;border-radius:6px;background:#f44336;color:#fff;font-size:1rem;width:100%;cursor:pointer}
   </style>
 </head>
 <body>
@@ -45,6 +49,7 @@
     <button onclick="showTab('followups')">Follow Ups</button>
     <button onclick="showTab('archive')">Archive</button>
     <button onclick="showTab('payouts')">Payouts</button>
+    <button onclick="showTab('done')">Done</button>
   </div>
   <div id="orders" class="tab-content active">
     <div class="filters">
@@ -52,12 +57,14 @@
       <select id="statusFilter" style="margin-bottom:1rem" onchange="applyFilter()">
         <option value="">All Statuses</option>
       </select>
+      <div id="driverFilter"></div>
     </div>
     <div id="ordersContainer"></div>
   </div>
   <div id="followups" class="tab-content"></div>
   <div id="archive" class="tab-content"></div>
   <div id="payouts" class="tab-content"></div>
+  <div id="done" class="tab-content"></div>
 <script>
 const API=window.location.origin.replace(/\/$/,'');
 const headers={'Content-Type':'application/json'};
@@ -76,9 +83,11 @@ function showTab(t){
   if(t==='orders') renderOrders();
   if(t==='followups') renderFollowups();
   if(t==='archive') renderArchive();
+  if(t==='done') renderDone();
 }
 
 let ordersData={},followupData={},archiveData={},driversCache=[];
+let doneData={},driverFilterVal='',recentUpdateKey=null;
 
 async function loadAll(){
   try{
@@ -92,6 +101,9 @@ async function loadAll(){
   await loadArchive(driversCache);
   loadPayouts(driversCache);
   populateStatusFilter();
+  loadDone();
+  populateDriverFilter();
+  setInterval(()=>{purgeExpiredDone();renderDone();},60000);
 
   const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
@@ -99,6 +111,7 @@ async function loadAll(){
     try{
       const msg = JSON.parse(evt.data);
       if(msg.type==='status_update' || msg.type==='new_order'){
+        if(msg.order && msg.driver) recentUpdateKey=`${msg.driver}_${msg.order}`;
         loadOrders(driversCache);
         loadFollowups(driversCache);
         loadArchive(driversCache);
@@ -111,13 +124,24 @@ async function loadAll(){
 async function loadOrders(drivers){
   ordersData={};
   const changed=[];
+  purgeExpiredDone();
   const results=await Promise.all(drivers.map(d=>
     apiGet(`/orders?driver=${d}`)
       .then(data=>({driver:d,data}))
       .catch(e=>{alert(`Error loading orders for ${d}: `+e);return {driver:d,data:[]};})
   ));
   results.forEach(r=>{
-    ordersData[r.driver]=r.data;
+    const filtered=r.data.filter(o=>!doneData[`${r.driver}_${o.orderName}`]);
+    if(recentUpdateKey){
+      filtered.sort((a,b)=>{
+        const ka=`${r.driver}_${a.orderName}`;
+        const kb=`${r.driver}_${b.orderName}`;
+        if(ka===recentUpdateKey) return -1;
+        if(kb===recentUpdateKey) return 1;
+        return 0;
+      });
+    }
+    ordersData[r.driver]=filtered;
     r.data.forEach(o=>{
       const key=`${r.driver}_${o.orderName}`;
       const prev=prevState[key]||{};
@@ -164,11 +188,12 @@ function populateStatusFilter(){
 }
 
 
-function renderSection(dataObj,container,includeInputs){
+function renderSection(dataObj,container,includeInputs,showDone,showUndone){
   const filter=(document.getElementById('searchInput').value||'').toLowerCase();
   const status=document.getElementById('statusFilter').value||'';
   container.innerHTML='';
   for(const [d,orders] of Object.entries(dataObj)){
+    if(driverFilterVal && d!==driverFilterVal) continue;
     const filtered=orders.filter(o=>{
       const phone=(o.customerPhone||'').toLowerCase();
       const name=(o.customerName||'').toLowerCase();
@@ -200,8 +225,14 @@ function renderSection(dataObj,container,includeInputs){
       }
       html+=`<textarea class="follow-log" placeholder="Follow log" onchange="updateFollow('${d}','${o.orderName}',this.value)">${o.followLog||''}</textarea>`+
         `<div id="comm-${key}" class="comm-log"></div>`+
-        `${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}`+
-      `</div>`;
+        `${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}`;
+      if(showDone){
+        html+=`<button class="done-btn" onclick="markDone('${d}','${o.orderName}')">Done</button>`;
+      }
+      if(showUndone){
+        html+=`<button class="undone-btn" onclick="markUndone('${d}','${o.orderName}')">Undone</button>`;
+      }
+      html+=`</div>`;
     });
     html+='</div>';
     container.innerHTML+=html;
@@ -209,9 +240,18 @@ function renderSection(dataObj,container,includeInputs){
   }
 }
 
-function renderOrders(){renderSection(ordersData,document.getElementById('ordersContainer'),true);}
-function renderFollowups(){renderSection(followupData,document.getElementById('followups'),true);}
-function renderArchive(){renderSection(archiveData,document.getElementById('archive'),false);}
+function renderOrders(){renderSection(ordersData,document.getElementById('ordersContainer'),true,true,false);}
+function renderFollowups(){renderSection(followupData,document.getElementById('followups'),true,true,false);}
+function renderArchive(){renderSection(archiveData,document.getElementById('archive'),false,false,false);}
+function renderDone(){
+  const data={};
+  for(const [k,v] of Object.entries(doneData)){
+    const [d,order]=k.split('_');
+    data[d]=data[d]||[];
+    data[d].push(v.order);
+  }
+  renderSection(data,document.getElementById('done'),false,false,true);
+}
 
 async function loadPayouts(drivers){
   const container=document.getElementById('payouts');
@@ -240,7 +280,9 @@ async function loadPayouts(drivers){
 }
 
 function updateOrderStatus(driver,order,status){
+  recentUpdateKey=`${driver}_${order}`;
   apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:status})
+    .then(()=>loadOrders(driversCache))
     .catch(e=>alert('Error updating status: '+e));
 }
 function updateNotes(driver,order,note){
@@ -264,12 +306,21 @@ function applySearch(){
   renderOrders();
   renderFollowups();
   renderArchive();
+  renderDone();
 }
 
 function applyFilter(){
   renderOrders();
   renderFollowups();
   renderArchive();
+  renderDone();
+}
+
+function applyDriverFilter(){
+  renderOrders();
+  renderFollowups();
+  renderArchive();
+  renderDone();
 }
 
 function getCommLog(key){try{return JSON.parse(localStorage.getItem('log_'+key)||'{}');}catch(e){return {};}}
@@ -287,6 +338,13 @@ function recordWhatsapp(key){
     .catch(e=>alert('Error logging message: '+e));
   displayCommunicationLog(key);return true;}
 function displayCommunicationLog(key){const log=getCommLog(key);const el=document.getElementById('comm-'+key);if(!el)return;const calls=(log.calls||[]).map(t=>'📞 '+t).join('\n');const whats=(log.whats||[]).map(t=>'💬 '+t).join('\n');el.textContent=[calls,whats].filter(Boolean).join('\n');}
+
+function saveDone(){localStorage.setItem('doneOrders',JSON.stringify(doneData));}
+function loadDone(){try{doneData=JSON.parse(localStorage.getItem('doneOrders')||'{}');}catch(e){doneData={};}purgeExpiredDone();renderDone();}
+function purgeExpiredDone(){const now=Date.now();let changed=false;for(const [k,v] of Object.entries(doneData)){if(now-v.time>4*3600*1000){delete doneData[k];changed=true;}}if(changed)saveDone();}
+function markDone(driver,order){const arr=ordersData[driver]||[];const idx=arr.findIndex(o=>o.orderName===order);if(idx>=0){const o=arr[idx];doneData[`${driver}_${order}`]={time:Date.now(),order:o};arr.splice(idx,1);saveDone();renderOrders();renderDone();updateFollow(driver,order,(o.followLog||'')+`\nDone @ ${new Date().toLocaleString()}`);}}
+function markUndone(driver,order){const key=`${driver}_${order}`;const info=doneData[key];if(info){delete doneData[key];saveDone();renderDone();loadOrders(driversCache);updateFollow(driver,order,(info.order.followLog||'')+`\nUndone @ ${new Date().toLocaleString()}`);}}
+function populateDriverFilter(){const container=document.getElementById('driverFilter');if(!container)return;container.innerHTML='';const colors=['#ff5722','#4caf50','#03a9f4','#ff9800','#e91e63','#009688'];let i=0;const allBtn=document.createElement('button');allBtn.textContent='All';allBtn.style.background='#607d8b';allBtn.onclick=()=>{driverFilterVal='';applyDriverFilter();};container.appendChild(allBtn);driversCache.forEach(d=>{const b=document.createElement('button');b.textContent=d;b.style.background=colors[i%colors.length];i++;b.onclick=()=>{driverFilterVal=d;applyDriverFilter();};container.appendChild(b);});}
 
 function formatDriverNotes(notes){
   return notes.split('\n').filter(Boolean).map(l=>{
