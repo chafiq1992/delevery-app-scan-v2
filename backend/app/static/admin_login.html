@@ -24,7 +24,7 @@
     function login() {
       const pw = document.getElementById('adminPassword').value.trim();
       fetch('/admin/login', {method:'POST', body:new URLSearchParams({password: pw})})
-        .then(r => r.ok ? location.href='/static/admin.html' : alert('Invalid password'));
+        .then(r => r.ok ? location.href='/static/admin_dashboard.html' : alert('Invalid password'));
     }
   </script>
 </body>
