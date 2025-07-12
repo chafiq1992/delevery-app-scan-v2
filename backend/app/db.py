@@ -33,8 +33,8 @@ class Driver(Base):
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    driver_id = Column(String, ForeignKey("drivers.id"))
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    driver_id = Column(String, ForeignKey("drivers.id"), index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     order_name = Column(String, index=True)
     customer_name = Column(String)
     customer_phone = Column(String)
@@ -43,11 +43,11 @@ class Order(Base):
     fulfillment = Column(String)
     order_status = Column(String)
     store = Column(String)
-    delivery_status = Column(String)
+    delivery_status = Column(String, index=True)
     notes = Column(Text)
     driver_notes = Column(Text)
     scheduled_time = Column(String)
-    scan_date = Column(String)
+    scan_date = Column(String, index=True)
     cash_amount = Column(Float)
     driver_fee = Column(Float)
     payout_id = Column(String)
@@ -60,9 +60,9 @@ class Order(Base):
 class Payout(Base):
     __tablename__ = "payouts"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    driver_id = Column(String, ForeignKey("drivers.id"))
+    driver_id = Column(String, ForeignKey("drivers.id"), index=True)
     payout_id = Column(String, index=True)
-    date_created = Column(DateTime, default=datetime.utcnow)
+    date_created = Column(DateTime, default=datetime.utcnow, index=True)
     orders = Column(Text)
     total_cash = Column(Float)
     total_fees = Column(Float)
@@ -75,9 +75,9 @@ class Payout(Base):
 class EmployeeLog(Base):
     __tablename__ = "employee_logs"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    employee = Column(String)
-    order = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    employee = Column(String, index=True)
+    order = Column(String, index=True)
     amount = Column(Float)
 
 async def get_session() -> AsyncSession:

@@ -253,6 +253,21 @@
       loadStatsHeader();
       applyDefaultRange();
 
+      // Setup WebSocket for real-time updates
+      const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
+      ws.onmessage = evt => {
+        try{
+          const msg = JSON.parse(evt.data);
+          if(msg.type==='status_update' && msg.driver===driver_id){
+            loadOrders();
+            loadPayouts();
+          } else if(msg.type==='new_order' && msg.driver===driver_id){
+            loadOrders();
+          }
+        }catch(e){ console.error('ws',e); }
+      };
+
     
   /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
@@ -502,12 +517,12 @@
         if(newStatus==='Livré'){
           card.classList.add('delivered');
           showStatusAnimation(card,'success',()=>{
-            slideAndRemove(card,'right',loadOrders);
+            slideAndRemove(card,'right');
           });
           loadPayouts();
         } else if(['Annulé','Refusé','Returned'].includes(newStatus)){
           showStatusAnimation(card,'fail',()=>{
-            slideAndRemove(card,'left',loadOrders);
+            slideAndRemove(card,'left');
           });
           loadPayouts();
         }
@@ -522,7 +537,7 @@
     t.value='';
     apiPut(`/order/status?driver=${driver_id}`,
            {order_name: orderName, driver_note: note})
-      .then(()=>loadOrders())
+      .then(()=>{})
       .catch(e=>alert('Error updating notes: '+e));
   }
 
@@ -536,7 +551,7 @@
   function updateScheduledTime(orderName,timeStr){
     apiPut(`/order/status?driver=${driver_id}`,
            {order_name: orderName, scheduled_time: timeStr})
-      .then(()=>loadOrders())
+      .then(()=>{})
       .catch(e=>alert('Error updating schedule: '+e));
   }
 

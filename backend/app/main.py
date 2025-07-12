@@ -15,16 +15,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 import os
+import json
 import datetime as dt
 from typing import List, Optional
 from datetime import timezone
 import httpx
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Form
 from cachetools import TTLCache
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+
+try:
+    import redis.asyncio as redis  # type: ignore
+except Exception:  # pragma: no cover - redis optional
+    redis = None
 
 from pydantic import BaseModel
 
@@ -133,12 +139,79 @@ async def load_drivers(session):
 # Simple admin password (override via env var)
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
-# In-memory caches for orders and payouts
-# shorter TTLs for near real-time updates
+# Shared cache (Redis if available, fallback to in-memory TTLCache)
+REDIS_URL = os.getenv("REDIS_URL")
+if redis and REDIS_URL:
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+else:  # pragma: no cover - used in local/dev
+    redis_client = None
+
 orders_cache = TTLCache(maxsize=8, ttl=60)
 payouts_cache = TTLCache(maxsize=8, ttl=60)
 archive_cache = TTLCache(maxsize=8, ttl=60)
 followups_cache = TTLCache(maxsize=8, ttl=60)
+
+async def cache_get(namespace: str, key: str):
+    if redis_client:
+        val = await redis_client.hget(namespace, key)
+        return json.loads(val) if val else None
+    cache = {
+        "orders": orders_cache,
+        "payouts": payouts_cache,
+        "archive": archive_cache,
+        "followups": followups_cache,
+    }[namespace]
+    return cache.get(key)
+
+async def cache_set(namespace: str, key: str, value, ttl: int = 60):
+    if redis_client:
+        await redis_client.hset(namespace, key, json.dumps(value))
+        await redis_client.expire(namespace, ttl)
+    else:
+        cache = {
+            "orders": orders_cache,
+            "payouts": payouts_cache,
+            "archive": archive_cache,
+            "followups": followups_cache,
+        }[namespace]
+        cache[key] = value
+
+async def cache_delete(namespace: str, key: str):
+    if redis_client:
+        await redis_client.hdel(namespace, key)
+    else:
+        cache = {
+            "orders": orders_cache,
+            "payouts": payouts_cache,
+            "archive": archive_cache,
+            "followups": followups_cache,
+        }[namespace]
+        cache.pop(key, None)
+
+
+class ConnectionManager:
+    """WebSocket connection manager for push notifications."""
+
+    def __init__(self) -> None:
+        self.active: list[WebSocket] = []
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self.active.append(ws)
+
+    def disconnect(self, ws: WebSocket) -> None:
+        if ws in self.active:
+            self.active.remove(ws)
+
+    async def broadcast(self, data: dict) -> None:
+        for ws in list(self.active):
+            try:
+                await ws.send_json(data)
+            except Exception:
+                self.disconnect(ws)
+
+
+manager = ConnectionManager()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -189,6 +262,16 @@ async def list_drivers():
     async for session in get_session():
         drivers = await load_drivers(session)
         return list(drivers.keys())
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await manager.connect(ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(ws)
 
 
 # Allow cross-origin requests
@@ -512,6 +595,13 @@ async def scan(
         session.add(order)
         await session.commit()
 
+        await cache_delete("orders", driver)
+        await manager.broadcast({
+            "type": "new_order",
+            "driver": driver,
+            "order": order_number,
+        })
+
         return ScanResult(
             result=result_msg,
             order=order_number,
@@ -523,8 +613,9 @@ async def scan(
 # -----------------------------  ORDERS  -------------------------------
 @app.get("/orders", tags=["orders"])
 async def list_active_orders(driver: str = Query(...)):
-    if driver in orders_cache:
-        return orders_cache[driver]
+    cached = await cache_get("orders", driver)
+    if cached is not None:
+        return cached
 
     async for session in get_session():
         await get_driver(session, driver)
@@ -581,14 +672,15 @@ async def list_active_orders(driver: str = Query(...)):
         else:
             o["urgent"] = False
 
-    orders_cache[driver] = active
+    await cache_set("orders", driver, active)
     return active
 
 
 @app.get("/orders/archive", tags=["orders"])
 async def list_archived_orders(driver: str = Query(...)):
-    if driver in archive_cache:
-        return archive_cache[driver]
+    cached = await cache_get("archive", driver)
+    if cached is not None:
+        return cached
 
     async for session in get_session():
         await get_driver(session, driver)
@@ -626,14 +718,15 @@ async def list_archived_orders(driver: str = Query(...)):
                 }
             )
 
-    archive_cache[driver] = archived
+    await cache_set("archive", driver, archived)
     return archived
 
 
 @app.get("/orders/followups", tags=["orders"])
 async def list_followup_orders(driver: str = Query(...)):
-    if driver in followups_cache:
-        return followups_cache[driver]
+    cached = await cache_get("followups", driver)
+    if cached is not None:
+        return cached
 
     async for session in get_session():
         await get_driver(session, driver)
@@ -692,7 +785,7 @@ async def list_followup_orders(driver: str = Query(...)):
                     }
                 )
 
-    followups_cache[driver] = followups
+    await cache_set("followups", driver, followups)
     return followups
 
 
@@ -757,16 +850,23 @@ async def update_order_status(
 
         await session.commit()
 
-        orders_cache.pop(driver, None)
-        payouts_cache.pop(driver, None)
+        await cache_delete("orders", driver)
+        await cache_delete("payouts", driver)
+        await manager.broadcast({
+            "type": "status_update",
+            "driver": driver,
+            "order": payload.order_name,
+            "status": payload.new_status,
+        })
         return {"success": True}
 
 
 # ----------------------------  PAYOUTS  -------------------------------
 @app.get("/payouts", tags=["payouts"])
 async def get_payouts(driver: str = Query(...)):
-    if driver in payouts_cache:
-        return payouts_cache[driver]
+    cached = await cache_get("payouts", driver)
+    if cached is not None:
+        return cached
 
     async for session in get_session():
         await get_driver(session, driver)
@@ -815,7 +915,7 @@ async def get_payouts(driver: str = Query(...)):
                 }
             )
 
-        payouts_cache[driver] = payouts
+        await cache_set("payouts", driver, payouts)
         return payouts
 
 
@@ -835,8 +935,8 @@ async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
         payout.date_paid = dt.datetime.utcnow()
         await session.commit()
 
-        payouts_cache.pop(driver, None)
-        orders_cache.pop(driver, None)
+        await cache_delete("payouts", driver)
+        await cache_delete("orders", driver)
         return {"success": True}
 
 

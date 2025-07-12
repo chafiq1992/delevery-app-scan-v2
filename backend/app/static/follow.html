@@ -92,12 +92,20 @@ async function loadAll(){
   await loadArchive(driversCache);
   loadPayouts(driversCache);
   populateStatusFilter();
-  setInterval(()=>{
-    loadOrders(driversCache);
-    loadFollowups(driversCache);
-    loadArchive(driversCache);
-    loadPayouts(driversCache);
-  },30000);
+
+  const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
+  ws.onmessage = evt => {
+    try{
+      const msg = JSON.parse(evt.data);
+      if(msg.type==='status_update' || msg.type==='new_order'){
+        loadOrders(driversCache);
+        loadFollowups(driversCache);
+        loadArchive(driversCache);
+        loadPayouts(driversCache);
+      }
+    }catch(e){console.error('ws',e);}
+  };
 }
 
 async function loadOrders(drivers){
