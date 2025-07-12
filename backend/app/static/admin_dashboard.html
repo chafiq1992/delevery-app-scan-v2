@@ -15,22 +15,37 @@
   </style>
 </head>
 <body class="text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-  <div class="bg-white shadow p-4 flex justify-between items-center">
-    <div class="text-2xl font-bold text-blue-700">Admin Dashboard</div>
-    <div class="flex items-center space-x-2">
-      <input type="date" id="startDate" class="border p-1 rounded" />
-      <span>to</span>
-      <input type="date" id="endDate" class="border p-1 rounded" />
-      <button class="bg-blue-600 text-white px-3 py-1 rounded" onclick="loadOverview()">Apply</button>
-    </div>
+  <div class="bg-white shadow py-2">
+    <img src="favicon.png" alt="Logo" class="mx-auto w-28" />
+  </div>
+  <div class="bg-gradient-to-r from-blue-600 to-blue-500 text-white text-center py-3 shadow">
+    <h1 class="text-2xl font-bold">Admin Dashboard</h1>
   </div>
 
-  <div class="flex space-x-2 bg-gray-100 p-2 sticky top-0 z-10">
+  <div class="flex space-x-2 bg-gray-100 p-2 sticky top-0 z-10 overflow-x-auto">
     <div class="tab active" data-tab="overview" onclick="activateTab('overview')">Statistics Overview</div>
     <div class="tab" data-tab="orders" onclick="activateTab('orders');loadOrdersTab()">Orders</div>
     <div class="tab" data-tab="parcels" onclick="activateTab('parcels');loadParcelsTab()">Parcels DB</div>
     <div class="tab" data-tab="payouts" onclick="activateTab('payouts');loadPayoutsTab()">Payouts DB</div>
     <div class="tab" data-tab="placeholder" onclick="activateTab('placeholder')">Other</div>
+  </div>
+
+  <div class="p-2 flex flex-wrap items-center justify-center gap-2 bg-white shadow">
+    <select id="presetRanges" class="border p-1 rounded" onchange="applyPresetRange()">
+      <option value="">Custom...</option>
+      <option value="today">Today</option>
+      <option value="yesterday">Yesterday</option>
+      <option value="7">Last 7 Days</option>
+      <option value="15">Last 15 Days</option>
+      <option value="30">Last 30 Days</option>
+      <option value="90">Last 90 Days</option>
+      <option value="year">This Year</option>
+      <option value="all">Since Beginning</option>
+    </select>
+    <input type="date" id="startDate" class="border p-1 rounded" />
+    <span>to</span>
+    <input type="date" id="endDate" class="border p-1 rounded" />
+    <button class="bg-blue-600 text-white px-3 py-1 rounded" onclick="loadOverview()">Apply</button>
   </div>
 
   <div id="overview" class="tab-content active">
@@ -164,6 +179,18 @@ function computeDefaultDates(){
   const start=new Date(end.getTime()-29*86400000);
   return{start:formatDate(start),end:formatDate(end)};
 }
+function applyPresetRange(){
+  const sel=document.getElementById('presetRanges').value;
+  const now=new Date();
+  let start='',end='';
+  const today=formatDate(now);
+  if(sel==='today'){start=end=today;}
+  else if(sel==='yesterday'){const d=new Date(now.getTime()-86400000);start=end=formatDate(d);}
+  else if(/^\d+$/.test(sel)){const days=parseInt(sel);end=today;start=formatDate(new Date(now.getTime()-(days-1)*86400000));}
+  else if(sel==='year'){start=`${now.getFullYear()}-01-01`;end=today;}
+  else if(sel==='all'){start='';end='';}
+  if(start!==''||end!==''){document.getElementById('startDate').value=start;document.getElementById('endDate').value=end;loadOverview();}
+}
 function activateTab(id){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
@@ -187,7 +214,7 @@ async function loadOverview(){
       if((o.deliveryStatus||'')==='Dispatched')dispatched++;else inprog++;pendingCash+=parseFloat(o.cashAmount)||0;});
     const delivered=s.delivered||0, returned=s.returned||0;
     const rate=s.totalOrders?((delivered/(s.totalOrders))*100).toFixed(1):'0';
-    driverEls.push(`<div class="bg-white p-4 rounded shadow"><div class="font-semibold mb-2">${d}</div><div class="text-sm">Delivered: <span class="text-green-600 font-bold">${delivered}</span> / Failed: <span class="text-red-600 font-bold">${returned}</span></div><div class="mt-1"><span class="text-sm">Success Rate:</span> <span class="font-bold ${rate>=80?'text-green-600':rate>=50?'text-yellow-600':'text-red-600'}">${rate}%</span></div></div>`);
+    driverEls.push(`<a href="/static/index.html?driver=${d}" target="_blank" class="block bg-white p-4 rounded shadow hover:bg-gray-50"><div class="font-semibold mb-2">${d}</div><div class="text-sm">Delivered: <span class="text-green-600 font-bold">${delivered}</span> / Failed: <span class="text-red-600 font-bold">${returned}</span></div><div class="mt-1"><span class="text-sm">Success Rate:</span> <span class="font-bold ${rate>=80?'text-green-600':rate>=50?'text-yellow-600':'text-red-600'}">${rate}%</span></div></a>`);
     total.delivered+=delivered;
     total.failed+=returned;
     total.orders+=s.totalOrders||0;
@@ -345,6 +372,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('endDate').value=end;
   document.getElementById('payoutsStart').value=start;
   document.getElementById('payoutsEnd').value=end;
+  const sel=document.getElementById('presetRanges');if(sel) sel.value='';
   loadOverview();
 });
 </script>
