@@ -466,7 +466,7 @@
           </div>
         </div>
         <div class="agent-notes">
-          <div class="agent-label">🧭 Agent Instructions</div>
+          <div class="agent-label">👤 Agent Notes</div>
           <div class="agent-text">${o.notes||''}</div>
         </div>
         <details class="actions-block">
@@ -496,7 +496,7 @@
         <div class="driver-notes-section">
           <textarea id="note-${o.orderName}" class="driver-note-input" placeholder="Add note…"></textarea>
           <button class="add-note-btn" onclick="addOrderNote('${o.orderName}')">Add Note</button>
-          <div class="notes-list">${(o.driverNotes||'').split('\n').filter(Boolean).map(n=>`<div class="note-item">${n}</div>`).join('')}</div>
+          <div class="notes-list">${(o.driverNotes||'').split('\n').filter(Boolean).map(n=>`<div class="note-item">🚚 ${n}</div>`).join('')}</div>
           ${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}
         </div>
       </div>`;
