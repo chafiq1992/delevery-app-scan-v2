@@ -739,7 +739,8 @@ async def list_followup_orders(driver: str = Query(...)):
         rows = result.scalars().all()
 
         followups = []
-        now = dt.datetime.now(timezone.utc)
+        # Use a naive timestamp to match values loaded from SQLite/PG
+        now = dt.datetime.utcnow()
         for o in rows:
             last_update = o.timestamp
             if o.status_log:
