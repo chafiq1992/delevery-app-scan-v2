@@ -113,6 +113,14 @@ class EmployeeLog(BaseModel):
     amount: Optional[float] = None
 
 
+class PayoutUpdate(BaseModel):
+    orders: Optional[str] = None
+    total_cash: Optional[float] = None
+    total_fees: Optional[float] = None
+    total_payout: Optional[float] = None
+    date_created: Optional[str] = None
+
+
 # ───────────────────────────────────────────────────────────────
 # FastAPI init + CORS (mobile apps & localhost dev)
 # ───────────────────────────────────────────────────────────────
@@ -939,6 +947,37 @@ async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
 
         await cache_delete("payouts", driver)
         await cache_delete("orders", driver)
+        return {"success": True}
+
+
+@app.put("/payout/{payout_id}", tags=["payouts"])
+async def update_payout(payout_id: str, payload: PayoutUpdate, driver: str = Query(...)):
+    async for session in get_session():
+        await get_driver(session, driver)
+        payout = await session.scalar(
+            select(Payout).where(Payout.driver_id == driver, Payout.payout_id == payout_id)
+        )
+        if not payout:
+            raise HTTPException(status_code=404, detail="Payout not found")
+
+        if payload.orders is not None:
+            payout.orders = payload.orders
+        if payload.total_cash is not None:
+            payout.total_cash = payload.total_cash
+        if payload.total_fees is not None:
+            payout.total_fees = payload.total_fees
+        if payload.total_payout is not None:
+            payout.total_payout = payload.total_payout
+        if payload.date_created:
+            try:
+                payout.date_created = dt.datetime.fromisoformat(payload.date_created)
+            except Exception:
+                pass
+        if payload.total_cash is not None or payload.total_fees is not None:
+            payout.total_payout = (payout.total_cash or 0) - (payout.total_fees or 0)
+
+        await session.commit()
+        await cache_delete("payouts", driver)
         return {"success": True}
 
 
