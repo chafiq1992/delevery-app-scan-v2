@@ -69,8 +69,9 @@ DELIVERY_STATUSES = [
     "Refusé",
     "Rescheduled",
     "Returned",
+    "Deleted",
 ]
-COMPLETED_STATUSES = ["Livré", "Annulé", "Refusé", "Returned"]
+COMPLETED_STATUSES = ["Livré", "Annulé", "Refusé", "Returned", "Deleted"]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
