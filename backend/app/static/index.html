@@ -6,6 +6,7 @@
   <title>Delivery Management</title>
   <link rel="icon" type="image/png" href="favicon.png" />
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);color:#333;line-height:1.6;min-height:100vh;overflow-x:hidden;scroll-behavior:smooth}
@@ -100,6 +101,8 @@
     .summary-item{text-align:center}
     .summary-label{font-size:0.9rem;opacity:0.9;margin-bottom:0.5rem}
     .summary-value{font-size:2rem;font-weight:bold}
+    .summary-rects{display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:center;margin-top:1rem}
+    .summary-rect{flex:1 1 80px;padding:0.4rem 0.6rem;background:#f8faff;border-radius:6px;text-align:center;font-weight:bold;font-size:0.9rem}
     .payout-card{background:white;border-radius:12px;padding:1.5rem;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-left:4px solid #4caf50}
     .payout-card.paid{border-left-color:#2196f3;opacity:0.8}
     .payout-header{display:flex;justify-content:between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:1rem}
@@ -188,11 +191,16 @@
   <div id="stats-tab" class="tab-content">
     <div class="range-picker">
       <div class="quick-ranges">
-        <button onclick="selectQuickRange(7)">Last 7 days</button>
-        <button onclick="selectQuickRange(15)">Last 15 days</button>
-        <button onclick="selectQuickRange(30)">Last 30 days</button>
-        <button onclick="selectQuickRange(90)">Last 90 days</button>
-        <button onclick="selectQuickRange(0)">Since start</button>
+        <select id="presetRanges" onchange="selectQuickRange(this.value)" style="padding:0.5rem 1rem;border-radius:6px;">
+          <option value="">Preset...</option>
+          <option value="today">Today</option>
+          <option value="yesterday">Yesterday</option>
+          <option value="7">Last 7 days</option>
+          <option value="15">Last 15 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="0">Since start</option>
+        </select>
       </div>
       <div class="custom-range">
         <input type="date" id="startDate">
@@ -301,15 +309,23 @@
     loadStatsRange();
   }
 
-  function selectQuickRange(days){
-    if(days===0){
+  function selectQuickRange(val){
+    const end = new Date();
+    let start = new Date();
+    if(val==='today'){
+      // start and end are today
+    }else if(val==='yesterday'){
+      start = new Date(end.getTime()-86400000);
+      end.setDate(end.getDate()-1);
+    }else if(parseInt(val,10)===0){
       document.getElementById('startDate').value='';
       document.getElementById('endDate').value='';
       loadStats(0);
       return;
+    }else if(parseInt(val,10)>0){
+      const days=parseInt(val,10);
+      start = new Date(end.getTime() - (days-1)*86400000);
     }
-    const end = new Date();
-    const start = new Date(end.getTime() - (days-1)*86400000);
     document.getElementById('startDate').value = formatDate(start);
     document.getElementById('endDate').value   = formatDate(end);
     loadStatsRange();
@@ -421,12 +437,13 @@
     let h = `
       <div class="order-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">📋 Orders Summary</h2>
-        <div class="summary-grid">
-          <div class="summary-item"><div class="summary-label">Active</div><div class="summary-value">${orders.length}</div></div>
-          <div class="summary-item"><div class="summary-label">Pas de réponse 1</div><div class="summary-value">${counts['Pas de réponse 1']}</div></div>
-          <div class="summary-item"><div class="summary-label">Pas de réponse 2</div><div class="summary-value">${counts['Pas de réponse 2']}</div></div>
-          <div class="summary-item"><div class="summary-label">Pas de réponse 3</div><div class="summary-value">${counts['Pas de réponse 3']}</div></div>
-          <div class="summary-item"><div class="summary-label">Rescheduled</div><div class="summary-value">${counts['Rescheduled']}</div></div>
+        <canvas id="ordersChart" style="height:200px;max-width:300px;margin:0 auto;"></canvas>
+        <div class="summary-rects">
+          <div class="summary-rect" style="background:#2196f3;color:#fff;">Active<br>${orders.length}</div>
+          <div class="summary-rect" style="background:#ff9800;color:#fff;">PDR1<br>${counts['Pas de réponse 1']}</div>
+          <div class="summary-rect" style="background:#ffb300;color:#fff;">PDR2<br>${counts['Pas de réponse 2']}</div>
+          <div class="summary-rect" style="background:#ff7043;color:#fff;">PDR3<br>${counts['Pas de réponse 3']}</div>
+          <div class="summary-rect" style="background:#9c27b0;color:#fff;">Resched<br>${counts['Rescheduled']}</div>
         </div>
       </div>`;
 
@@ -502,8 +519,37 @@
       </div>`;
     });
     c.innerHTML = h;
+    renderOrdersChart(orders, counts);
     orders.forEach(o=>displayCommunicationLog(o.orderName));
     startCountdown();
+  }
+
+  function renderOrdersChart(orders, counts){
+    const ctx = document.getElementById('ordersChart').getContext('2d');
+    if(window.ordersChart) window.ordersChart.destroy();
+    window.ordersChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Active','PDR1','PDR2','PDR3','Resched'],
+        datasets: [{
+          data: [
+            orders.length,
+            counts['Pas de réponse 1'],
+            counts['Pas de réponse 2'],
+            counts['Pas de réponse 3'],
+            counts['Rescheduled']
+          ],
+          backgroundColor: [
+            '#2196f3',
+            '#ff9800',
+            '#ffb300',
+            '#ff7043',
+            '#9c27b0'
+          ]
+        }]
+      },
+      options:{responsive:true,maintainAspectRatio:false}
+    });
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -729,6 +775,7 @@
     const h = `
       <div class="payout-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">📊 Stats Summary</h2>
+        <canvas id="statsChart" style="height:200px;max-width:300px;margin:0 auto;"></canvas>
         <div class="summary-grid">
           <div class="summary-item"><div class="summary-label">Total Orders</div><div class="summary-value">${st.totalOrders}</div></div>
           <div class="summary-item"><div class="summary-label">Delivered</div><div class="summary-value">${st.delivered}</div></div>
@@ -739,6 +786,24 @@
         </div>
       </div>`;
     document.getElementById('statsContainer').innerHTML = h;
+    renderStatsChart(st);
+  }
+
+  function renderStatsChart(st){
+    const other = st.totalOrders - st.delivered - st.returned;
+    const ctx = document.getElementById('statsChart').getContext('2d');
+    if(window.statsChart) window.statsChart.destroy();
+    window.statsChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Delivered','Returned','Other'],
+        datasets: [{
+          data: [st.delivered, st.returned, other],
+          backgroundColor: ['#4caf50','#f44336','#2196f3']
+        }]
+      },
+      options: {responsive:true,maintainAspectRatio:false}
+    });
   }
 
   // Expose functions globally for inline handlers
