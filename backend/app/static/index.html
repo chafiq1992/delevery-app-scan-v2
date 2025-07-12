@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="favicon.png" />
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);color:#333;line-height:1.6;min-height:100vh;overflow-x:hidden;scroll-behavior:smooth}
@@ -176,7 +177,7 @@
   
   <div id="orders-tab" class="tab-content">
     <!-- 📊 NEW – sticky doughnut chart -->
-    <div id="ordersChartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
+    <div id="ordersChartBox" style="margin:0.5rem auto;text-align:center;max-width:240px">
       <canvas id="ordersChart" width="240" height="240"></canvas>
     </div>
     <div id="ordersContainer" class="orders-container">
@@ -194,7 +195,7 @@
 
   <div id="stats-tab" class="tab-content">
     <!-- 📊 NEW – sticky doughnut chart -->
-    <div id="statsChartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
+    <div id="statsChartBox" style="margin:0.5rem auto;text-align:center;max-width:240px">
       <canvas id="statsChart" width="240" height="240"></canvas>
     </div>
     <div class="range-picker">
@@ -224,7 +225,11 @@
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
+  document.addEventListener('DOMContentLoaded', function () {
+    // Register datalabels plugin for percentage display
+    if (window.Chart && window.ChartDataLabels) {
+      Chart.register(window.ChartDataLabels);
+    }
       /* ─────────────────────────────────────────────────────────────
          1.  Tiny helper → same host as FastAPI on Render
          ────────────────────────────────────────────────────────────*/
@@ -321,7 +326,16 @@
       },
       options: {
         cutout: '65%',
-        plugins: { legend: { position: 'bottom' } },
+        plugins: {
+          legend: { position: 'bottom' },
+          datalabels: {
+            color: '#000',
+            formatter: (v,ctx) => {
+              const t = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+              return t? `${v}\n(${((v/t)*100).toFixed(1)}%)` : '';
+            }
+          }
+        },
         maintainAspectRatio: false
       }
     });
@@ -346,7 +360,16 @@
       },
       options: {
         cutout: '65%',
-        plugins: { legend: { position: 'bottom' } },
+        plugins: {
+          legend: { position: 'bottom' },
+          datalabels: {
+            color: '#000',
+            formatter: (v,ctx) => {
+              const t = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0);
+              return t? `${v}\n(${((v/t)*100).toFixed(1)}%)` : '';
+            }
+          }
+        },
         maintainAspectRatio: false
       }
     });
