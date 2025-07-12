@@ -11,8 +11,9 @@
     .main-header{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1rem;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
     .logo-icon{width:120px;height:auto;margin:0 auto;display:block}
     body.dark{--bg:#121212;--text:#eee;--card:#1e1e1e}
-    .tabs{display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
-    .tabs button{padding:0.5rem 1rem;border:none;background:#004aad;color:white;border-radius:6px;cursor:pointer}
+    .tabs{display:flex;justify-content:center;background:linear-gradient(135deg,#004aad,#0066cc);margin-bottom:0;position:sticky;top:0;z-index:150}
+    .tabs button{flex:1;padding:1rem;border:none;background:transparent;color:white;font-size:1.1rem;cursor:pointer;transition:background 0.3s}
+    .tabs button.active,.tabs button:hover{background:rgba(255,255,255,0.2)}
     .tab-content{display:none}
     .tab-content.active{display:block}
     .driver-section{margin-bottom:2rem}
@@ -35,7 +36,8 @@
     .tag-oscario{background:#40e0d0;color:#333}
     .tag-sand{background:#ffcc80;color:#333}
     .tag-ch{background:#ffab91;color:#333}
-    .filters{position:sticky;top:0;background:var(--bg);padding-bottom:0.5rem;z-index:100}
+    .filters{position:sticky;top:3.5rem;background:var(--bg);padding-bottom:0.5rem;z-index:100}
+    #orders .filters{top:6.5rem}
     #driverFilter{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem}
     #driverFilter button{padding:0.3rem 0.6rem;border:none;border-radius:6px;color:#fff;cursor:pointer}
     .driver-log{background:#f5f5f5;padding:0.4rem;border-radius:6px;margin-top:0.3rem}
@@ -45,6 +47,9 @@
     .undone-btn{margin-top:0.5rem;padding:0.6rem;border:none;border-radius:6px;background:#f44336;color:#fff;font-size:1rem;width:100%;cursor:pointer}
     .paid-status{color:#2e7d32}
     .pending-status{color:#f57c00}
+    .payout-card{background:var(--card);border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+    .payout-header{display:flex;justify-content:space-between;font-weight:bold;color:#004aad;margin-bottom:0.5rem}
+    .payout-amount{font-weight:bold;color:#2e7d32;font-size:1.1rem}
   </style>
 </head>
 <body>
@@ -56,10 +61,13 @@
   </div>
   <button onclick="toggleDark()" style="position:fixed;top:5px;right:5px;z-index:200">🌓</button>
   <div class="tabs">
-    <button onclick="showTab('orders')">Orders</button>
-    <button onclick="showTab('archive')">Archive</button>
-    <button onclick="showTab('payouts')">Payouts</button>
-    <button onclick="showTab('done')">Done</button>
+    <button data-tab="orders" class="active" onclick="showTab('orders')">Today Suivi</button>
+    <button data-tab="done" onclick="showTab('done')">Done</button>
+    <button data-tab="archive" onclick="showTab('archive')">Archive</button>
+    <button data-tab="payouts" onclick="showTab('payouts')">Payouts</button>
+  </div>
+  <div class="filters" id="driverFilterContainer">
+    <div id="driverFilter"></div>
   </div>
   <div id="orders" class="tab-content active">
     <div class="filters">
@@ -67,7 +75,6 @@
       <select id="statusFilter" style="margin-bottom:1rem" onchange="applyFilter()">
         <option value="">All Statuses</option>
       </select>
-      <div id="driverFilter"></div>
     </div>
     <div id="ordersContainer"></div>
   </div>
@@ -88,6 +95,9 @@ let prevState={};
 
 function showTab(t){
   document.querySelectorAll('.tab-content').forEach(d=>d.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  const btn=document.querySelector(`.tabs button[data-tab="${t}"]`);
+  if(btn) btn.classList.add('active');
   document.getElementById(t).classList.add('active');
   if(t==='orders') renderOrders();
   if(t==='archive') renderArchive();
@@ -268,25 +278,25 @@ async function loadPayouts(drivers){
     const paid=payouts.filter(p=>p.status==='paid');
     let html=`<div class="driver-section"><h2 style="color:${color}">${d.toUpperCase()}</h2>`;
     pending.forEach(p=>{
-      html+=`<div class="order-card">
-        <div class="order-header">${p.payoutId}<span class="pending-status">${p.status}</span></div>
+      html+=`<div class="payout-card">
+        <div class="payout-header">${p.payoutId}<span class="pending-status">${p.status}</span></div>
         <div>Date: ${p.dateCreated}</div>
         <div>Orders: ${p.orders}</div>
         <div>Total Cash: ${p.totalCash}</div>
         <div>Total Fees: ${p.totalFees}</div>
-        <div>Net: ${p.totalPayout}</div>
+        <div class="payout-amount">Net: ${p.totalPayout}</div>
       </div>`;
     });
     if(paid.length){
       html+='<details><summary>See older payouts</summary>';
       paid.forEach(p=>{
-        html+=`<div class="order-card">
-          <div class="order-header">${p.payoutId}<span class="paid-status">${p.status}</span></div>
+        html+=`<div class="payout-card">
+          <div class="payout-header">${p.payoutId}<span class="paid-status">${p.status}</span></div>
           <div>Date: ${p.dateCreated}</div>
           <div>Orders: ${p.orders}</div>
           <div>Total Cash: ${p.totalCash}</div>
           <div>Total Fees: ${p.totalFees}</div>
-          <div>Net: ${p.totalPayout}</div>
+          <div class="payout-amount">Net: ${p.totalPayout}</div>
         </div>`;
       });
       html+='</details>';
