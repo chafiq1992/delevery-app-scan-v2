@@ -147,8 +147,7 @@ async function loadOrders(drivers){
       .catch(e=>{alert(`Error loading orders for ${d}: `+e);return {driver:d,data:[]};})
   ));
   results.forEach(r=>{
-    const statuses=['Pas de réponse 3','Annulé','Refusé'];
-    const filtered=r.data.filter(o=>statuses.includes(o.deliveryStatus)&&!doneData[`${r.driver}_${o.orderName}`]);
+    const filtered=r.data.filter(o=>!doneData[`${r.driver}_${o.orderName}`]);
     if(recentUpdateKey){
       filtered.sort((a,b)=>{
         const ka=`${r.driver}_${a.orderName}`;
