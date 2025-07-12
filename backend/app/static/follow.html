@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Follow Agent</title>
+  <title>Suivi Dashboard</title>
   <style>
     :root{--bg:#f5f7fa;--text:#333;--card:#fff}
-    body{font-family:sans-serif;background:var(--bg);color:var(--text);margin:0;padding:1rem;min-height:100vh}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);color:#333;margin:0;min-height:100vh}
+    .top-header{background:white;text-align:center;padding:0.5rem 1rem;box-shadow:0 2px 4px rgba(0,0,0,0.05)}
+    .main-header{background:linear-gradient(135deg,#004aad,#0066cc);color:white;padding:1rem;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
+    .logo-icon{width:120px;height:auto;margin:0 auto;display:block}
     body.dark{--bg:#121212;--text:#eee;--card:#1e1e1e}
     .tabs{display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
     .tabs button{padding:0.5rem 1rem;border:none;background:#004aad;color:white;border-radius:6px;cursor:pointer}
@@ -40,13 +43,20 @@
     .driver-log .log-time{color:#666}
     .done-btn{margin-top:0.5rem;padding:0.6rem;border:none;border-radius:6px;background:#4caf50;color:#fff;font-size:1rem;width:100%;cursor:pointer}
     .undone-btn{margin-top:0.5rem;padding:0.6rem;border:none;border-radius:6px;background:#f44336;color:#fff;font-size:1rem;width:100%;cursor:pointer}
+    .paid-status{color:#2e7d32}
+    .pending-status{color:#f57c00}
   </style>
 </head>
 <body>
+  <div class="top-header">
+    <img src="favicon.png" alt="Logo" class="logo-icon">
+  </div>
+  <div class="main-header">
+    <h1>🚚 Suivi Dashboard</h1>
+  </div>
   <button onclick="toggleDark()" style="position:fixed;top:5px;right:5px;z-index:200">🌓</button>
   <div class="tabs">
     <button onclick="showTab('orders')">Orders</button>
-    <button onclick="showTab('followups')">Follow Ups</button>
     <button onclick="showTab('archive')">Archive</button>
     <button onclick="showTab('payouts')">Payouts</button>
     <button onclick="showTab('done')">Done</button>
@@ -61,7 +71,6 @@
     </div>
     <div id="ordersContainer"></div>
   </div>
-  <div id="followups" class="tab-content"></div>
   <div id="archive" class="tab-content"></div>
   <div id="payouts" class="tab-content"></div>
   <div id="done" class="tab-content"></div>
@@ -81,12 +90,11 @@ function showTab(t){
   document.querySelectorAll('.tab-content').forEach(d=>d.classList.remove('active'));
   document.getElementById(t).classList.add('active');
   if(t==='orders') renderOrders();
-  if(t==='followups') renderFollowups();
   if(t==='archive') renderArchive();
   if(t==='done') renderDone();
 }
 
-let ordersData={},followupData={},archiveData={},driversCache=[];
+let ordersData={},archiveData={},driversCache=[];
 let doneData={},driverFilterVal='',recentUpdateKey=null;
 
 async function loadAll(){
@@ -97,7 +105,6 @@ async function loadAll(){
     driversCache=[];
   }
   await loadOrders(driversCache);
-  await loadFollowups(driversCache);
   await loadArchive(driversCache);
   loadPayouts(driversCache);
   populateStatusFilter();
@@ -113,7 +120,6 @@ async function loadAll(){
       if(msg.type==='status_update' || msg.type==='new_order'){
         if(msg.order && msg.driver) recentUpdateKey=`${msg.driver}_${msg.order}`;
         loadOrders(driversCache);
-        loadFollowups(driversCache);
         loadArchive(driversCache);
         loadPayouts(driversCache);
       }
@@ -131,7 +137,8 @@ async function loadOrders(drivers){
       .catch(e=>{alert(`Error loading orders for ${d}: `+e);return {driver:d,data:[]};})
   ));
   results.forEach(r=>{
-    const filtered=r.data.filter(o=>!doneData[`${r.driver}_${o.orderName}`]);
+    const statuses=['Pas de réponse 3','Annulé','Refusé'];
+    const filtered=r.data.filter(o=>statuses.includes(o.deliveryStatus)&&!doneData[`${r.driver}_${o.orderName}`]);
     if(recentUpdateKey){
       filtered.sort((a,b)=>{
         const ka=`${r.driver}_${a.orderName}`;
@@ -155,16 +162,6 @@ async function loadOrders(drivers){
   changed.forEach(k=>flashCard(k));
 }
 
-async function loadFollowups(drivers){
-  followupData={};
-  const results=await Promise.all(drivers.map(d=>
-    apiGet(`/orders/followups?driver=${d}`)
-      .then(data=>({driver:d,data}))
-      .catch(e=>{alert(`Error loading followups for ${d}: `+e);return {driver:d,data:[]};})
-  ));
-  results.forEach(r=>{followupData[r.driver]=r.data;});
-  renderFollowups();
-}
 
 async function loadArchive(drivers){
   archiveData={};
@@ -203,7 +200,10 @@ function renderSection(dataObj,container,includeInputs,showDone,showUndone){
       return matchesText&&matchesStatus;
     });
     if(!filtered.length) continue;
-    let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
+    const colors=['#ff5722','#4caf50','#03a9f4','#ff9800','#e91e63','#009688'];
+    const idx=driversCache.indexOf(d);
+    const color=colors[idx%colors.length];
+    let html=`<div class="driver-section"><h2 style="color:${color}">${d.toUpperCase()}</h2>`;
   filtered.forEach(o=>{
       const key=`${d}_${o.orderName}`;
       const border=statusColors[o.deliveryStatus]||'#004aad';
@@ -241,7 +241,6 @@ function renderSection(dataObj,container,includeInputs,showDone,showUndone){
 }
 
 function renderOrders(){renderSection(ordersData,document.getElementById('ordersContainer'),true,true,false);}
-function renderFollowups(){renderSection(followupData,document.getElementById('followups'),true,true,false);}
 function renderArchive(){renderSection(archiveData,document.getElementById('archive'),false,false,false);}
 function renderDone(){
   const data={};
@@ -263,10 +262,14 @@ async function loadPayouts(drivers){
   ));
   results.forEach(r=>{
     const d=r.driver;const payouts=r.data;
-    let html=`<div class="driver-section"><h2>${d.toUpperCase()}</h2>`;
-    payouts.forEach(p=>{
+    const colors=['#ff5722','#4caf50','#03a9f4','#ff9800','#e91e63','#009688'];
+    const idx=driversCache.indexOf(d);const color=colors[idx%colors.length];
+    const pending=payouts.filter(p=>p.status!=='paid');
+    const paid=payouts.filter(p=>p.status==='paid');
+    let html=`<div class="driver-section"><h2 style="color:${color}">${d.toUpperCase()}</h2>`;
+    pending.forEach(p=>{
       html+=`<div class="order-card">
-        <div class="order-header">${p.payoutId}<span>${p.status}</span></div>
+        <div class="order-header">${p.payoutId}<span class="pending-status">${p.status}</span></div>
         <div>Date: ${p.dateCreated}</div>
         <div>Orders: ${p.orders}</div>
         <div>Total Cash: ${p.totalCash}</div>
@@ -274,6 +277,20 @@ async function loadPayouts(drivers){
         <div>Net: ${p.totalPayout}</div>
       </div>`;
     });
+    if(paid.length){
+      html+='<details><summary>See older payouts</summary>';
+      paid.forEach(p=>{
+        html+=`<div class="order-card">
+          <div class="order-header">${p.payoutId}<span class="paid-status">${p.status}</span></div>
+          <div>Date: ${p.dateCreated}</div>
+          <div>Orders: ${p.orders}</div>
+          <div>Total Cash: ${p.totalCash}</div>
+          <div>Total Fees: ${p.totalFees}</div>
+          <div>Net: ${p.totalPayout}</div>
+        </div>`;
+      });
+      html+='</details>';
+    }
     html+='</div>';
     container.innerHTML+=html;
   });
@@ -304,21 +321,18 @@ function updateFollow(driver,order,log){
 
 function applySearch(){
   renderOrders();
-  renderFollowups();
   renderArchive();
   renderDone();
 }
 
 function applyFilter(){
   renderOrders();
-  renderFollowups();
   renderArchive();
   renderDone();
 }
 
 function applyDriverFilter(){
   renderOrders();
-  renderFollowups();
   renderArchive();
   renderDone();
 }
