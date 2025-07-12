@@ -176,8 +176,8 @@
   
   <div id="orders-tab" class="tab-content">
     <!-- 📊 NEW – sticky doughnut chart -->
-    <div id="chartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
-      <canvas id="deliveryChart" width="240" height="240"></canvas>
+    <div id="ordersChartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
+      <canvas id="ordersChart" width="240" height="240"></canvas>
     </div>
     <div id="ordersContainer" class="orders-container">
       <div class="loading">Click here to load orders</div>
@@ -194,8 +194,8 @@
 
   <div id="stats-tab" class="tab-content">
     <!-- 📊 NEW – sticky doughnut chart -->
-    <div id="chartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
-      <canvas id="deliveryChart" width="240" height="240"></canvas>
+    <div id="statsChartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
+      <canvas id="statsChart" width="240" height="240"></canvas>
     </div>
     <div class="range-picker">
       <div class="quick-ranges">
@@ -293,27 +293,54 @@
   const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
 
   /* ---------- Charts ---------- */
-  let deliveryChart = null;
+  let ordersChart = null;
+  let statsChart  = null;
 
-  function buildOrUpdateDeliveryChart() {
+  function buildOrdersChart() {
+    if(!orders.length) return;
     const delivered = orders.filter(o => o.deliveryStatus === 'Livré').length;
-    const total = orders.length;
-    const notDelivered = total - delivered;
-    if (!total) return;
+    const failed = orders.filter(o => ['Annulé','Refusé','Returned'].includes(o.deliveryStatus)).length;
+    const dispatched = orders.filter(o => o.deliveryStatus === 'Dispatched').length;
+    const inprog = orders.length - delivered - failed - dispatched;
 
-    const canvas = document.querySelector('#orders-tab #deliveryChart, #stats-tab #deliveryChart');
+    const canvas = document.getElementById('ordersChart');
     if(!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    if (deliveryChart) deliveryChart.destroy();
+    if (ordersChart) ordersChart.destroy();
 
-    deliveryChart = new Chart(ctx, {
+    ordersChart = new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: ['Livré', 'Autres'],
+        labels: ['Livré','Annulé/Refusé/Retourné','Dispatched','En cours'],
         datasets: [{
-          data: [delivered, notDelivered],
-          backgroundColor: ['#4caf50', '#ff9800'],
+          data: [delivered, failed, dispatched, inprog],
+          backgroundColor: ['#4caf50','#f44336','#2196f3','#ff9800'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        cutout: '65%',
+        plugins: { legend: { position: 'bottom' } },
+        maintainAspectRatio: false
+      }
+    });
+  }
+
+  function buildStatsChart(data) {
+    const canvas = document.getElementById('statsChart');
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (statsChart) statsChart.destroy();
+
+    statsChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Livré','Annulé/Refusé/Retourné','Dispatched','En cours'],
+        datasets: [{
+          data: [data.delivered, data.failed, data.dispatched, data.inprog],
+          backgroundColor: ['#4caf50','#f44336','#2196f3','#ff9800'],
           borderWidth: 0
         }]
       },
@@ -559,7 +586,7 @@
       </div>`;
     });
     c.innerHTML = h;
-    buildOrUpdateDeliveryChart();
+    buildOrdersChart();
     orders.forEach(o=>displayCommunicationLog(o.orderName));
     startCountdown();
   }
@@ -808,7 +835,12 @@
         </div>
       </div>`;
     document.getElementById('statsContainer').innerHTML = h;
-    buildOrUpdateDeliveryChart();
+    buildStatsChart({
+      delivered: st.delivered || 0,
+      failed: st.returned || 0,
+      dispatched,
+      inprog
+    });
   }
 
 
