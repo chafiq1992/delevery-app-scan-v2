@@ -526,8 +526,8 @@
 
   function renderOrdersChart(orders, counts){
     const ctx = document.getElementById('ordersChart').getContext('2d');
-    if(window.ordersChart) window.ordersChart.destroy();
-    window.ordersChart = new Chart(ctx, {
+    if(window.ordersChartInst) window.ordersChartInst.destroy();
+    window.ordersChartInst = new Chart(ctx, {
       type: 'doughnut',
       data: {
         labels: ['Active','PDR1','PDR2','PDR3','Resched'],
@@ -792,8 +792,8 @@
   function renderStatsChart(st){
     const other = st.totalOrders - st.delivered - st.returned;
     const ctx = document.getElementById('statsChart').getContext('2d');
-    if(window.statsChart) window.statsChart.destroy();
-    window.statsChart = new Chart(ctx, {
+    if(window.statsChartInst) window.statsChartInst.destroy();
+    window.statsChartInst = new Chart(ctx, {
       type: 'doughnut',
       data: {
         labels: ['Delivered','Returned','Other'],
