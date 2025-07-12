@@ -175,6 +175,10 @@
   </div>
   
   <div id="orders-tab" class="tab-content">
+    <!-- 📊 NEW – sticky doughnut chart -->
+    <div id="chartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
+      <canvas id="deliveryChart" width="240" height="240"></canvas>
+    </div>
     <div id="ordersContainer" class="orders-container">
       <div class="loading">Click here to load orders</div>
       <button class="scan-btn" onclick="loadOrders()">📋 Load Orders</button>
@@ -189,6 +193,10 @@
   </div>
 
   <div id="stats-tab" class="tab-content">
+    <!-- 📊 NEW – sticky doughnut chart -->
+    <div id="chartBox" style="position:sticky;top:6.5rem;z-index:90;margin:0.5rem auto 0;max-width:240px">
+      <canvas id="deliveryChart" width="240" height="240"></canvas>
+    </div>
     <div class="range-picker">
       <div class="quick-ranges">
         <select id="presetRanges" onchange="selectQuickRange(this.value)" style="padding:0.5rem 1rem;border-radius:6px;">
@@ -283,6 +291,39 @@
   let scanner, orders = [], payouts = [];
   const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
   const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
+
+  /* ---------- Charts ---------- */
+  let deliveryChart = null;
+
+  function buildOrUpdateDeliveryChart() {
+    const delivered = orders.filter(o => o.deliveryStatus === 'Livré').length;
+    const total = orders.length;
+    const notDelivered = total - delivered;
+    if (!total) return;
+
+    const canvas = document.querySelector('#orders-tab #deliveryChart, #stats-tab #deliveryChart');
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (deliveryChart) deliveryChart.destroy();
+
+    deliveryChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Livré', 'Autres'],
+        datasets: [{
+          data: [delivered, notDelivered],
+          backgroundColor: ['#4caf50', '#ff9800'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        cutout: '65%',
+        plugins: { legend: { position: 'bottom' } },
+        maintainAspectRatio: false
+      }
+    });
+  }
 
   function updateDeliveryRateDisplay(rate){
     const el = document.getElementById('deliveryRate');
@@ -437,7 +478,6 @@
     let h = `
       <div class="order-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">📋 Orders Summary</h2>
-        <canvas id="ordersChart" style="height:200px;max-width:300px;margin:0 auto;"></canvas>
         <div class="summary-rects">
           <div class="summary-rect" style="background:#2196f3;color:#fff;">Active<br>${orders.length}</div>
           <div class="summary-rect" style="background:#ff9800;color:#fff;">PDR1<br>${counts['Pas de réponse 1']}</div>
@@ -519,38 +559,12 @@
       </div>`;
     });
     c.innerHTML = h;
-    renderOrdersChart(orders, counts);
+    buildOrUpdateDeliveryChart();
     orders.forEach(o=>displayCommunicationLog(o.orderName));
     startCountdown();
   }
 
-  function renderOrdersChart(orders, counts){
-    const ctx = document.getElementById('ordersChart').getContext('2d');
-    if(window.ordersChartInst) window.ordersChartInst.destroy();
-    window.ordersChartInst = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Active','PDR1','PDR2','PDR3','Resched'],
-        datasets: [{
-          data: [
-            orders.length,
-            counts['Pas de réponse 1'],
-            counts['Pas de réponse 2'],
-            counts['Pas de réponse 3'],
-            counts['Rescheduled']
-          ],
-          backgroundColor: [
-            '#2196f3',
-            '#ff9800',
-            '#ffb300',
-            '#ff7043',
-            '#9c27b0'
-          ]
-        }]
-      },
-      options:{responsive:true,maintainAspectRatio:false}
-    });
-  }
+
 
   /* ─────────────────────────────────────────────────────────────
      7.  Orders – update endpoints
@@ -784,7 +798,6 @@
     const h = `
       <div class="payout-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">📊 Stats Summary</h2>
-        <canvas id="statsChart" style="height:300px"></canvas>
         <div class="summary-grid">
           <div class="summary-item"><div class="summary-label">Total Orders</div><div class="summary-value">${st.totalOrders}</div></div>
           <div class="summary-item"><div class="summary-label">Delivered</div><div class="summary-value">${st.delivered}</div></div>
@@ -795,24 +808,9 @@
         </div>
       </div>`;
     document.getElementById('statsContainer').innerHTML = h;
-    renderStatsChart({delivered:st.delivered,failed:st.returned,dispatched,inprog});
+    buildOrUpdateDeliveryChart();
   }
 
-  function renderStatsChart(t){
-    const ctx = document.getElementById('statsChart').getContext('2d');
-    if(window.statsChartInst) window.statsChartInst.destroy();
-    window.statsChartInst = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Delivered','Failed','Dispatched','In Progress'],
-        datasets: [{
-          data: [t.delivered,t.failed,t.dispatched,t.inprog],
-          backgroundColor: ['#4caf50','#f44336','#2196f3','#ff9800']
-        }]
-      },
-      options: {responsive:true,maintainAspectRatio:false}
-    });
-  }
 
   // Expose functions globally for inline handlers
   Object.assign(window, {
