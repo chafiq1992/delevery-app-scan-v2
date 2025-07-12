@@ -769,13 +769,22 @@
       .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
   }
 
-  function displayStats(st){
+  async function displayStats(st){
     if(!st){return;}
     updateDeliveryRateDisplay(st.deliveryRate||0);
+
+    // ensure we have current active orders to compute extra stats
+    if(!orders.length){
+      try{orders = await apiGet(`/orders?driver=${driver_id}`);}catch{orders=[];}
+    }
+
+    let dispatched=0,inprog=0;
+    orders.forEach(o=>{((o.deliveryStatus||'')==='Dispatched')?dispatched++:inprog++;});
+
     const h = `
       <div class="payout-summary">
         <h2 style="text-align:center;margin-bottom:1rem;">📊 Stats Summary</h2>
-        <canvas id="statsChart" style="height:200px;max-width:300px;margin:0 auto;"></canvas>
+        <canvas id="statsChart" style="height:300px"></canvas>
         <div class="summary-grid">
           <div class="summary-item"><div class="summary-label">Total Orders</div><div class="summary-value">${st.totalOrders}</div></div>
           <div class="summary-item"><div class="summary-label">Delivered</div><div class="summary-value">${st.delivered}</div></div>
@@ -786,20 +795,19 @@
         </div>
       </div>`;
     document.getElementById('statsContainer').innerHTML = h;
-    renderStatsChart(st);
+    renderStatsChart({delivered:st.delivered,failed:st.returned,dispatched,inprog});
   }
 
-  function renderStatsChart(st){
-    const other = st.totalOrders - st.delivered - st.returned;
+  function renderStatsChart(t){
     const ctx = document.getElementById('statsChart').getContext('2d');
     if(window.statsChartInst) window.statsChartInst.destroy();
     window.statsChartInst = new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: ['Delivered','Returned','Other'],
+        labels: ['Delivered','Failed','Dispatched','In Progress'],
         datasets: [{
-          data: [st.delivered, st.returned, other],
-          backgroundColor: ['#4caf50','#f44336','#2196f3']
+          data: [t.delivered,t.failed,t.dispatched,t.inprog],
+          backgroundColor: ['#4caf50','#f44336','#2196f3','#ff9800']
         }]
       },
       options: {responsive:true,maintainAspectRatio:false}
