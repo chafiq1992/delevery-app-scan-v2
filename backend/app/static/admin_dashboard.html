@@ -27,6 +27,8 @@
 
   <div class="flex space-x-2 bg-gray-100 p-2 sticky top-0 z-10">
     <div class="tab active" data-tab="overview" onclick="activateTab('overview')">Statistics Overview</div>
+    <div class="tab" data-tab="orders" onclick="activateTab('orders');loadOrdersTab()">Orders</div>
+    <div class="tab" data-tab="parcels" onclick="activateTab('parcels');loadParcelsTab()">Parcels DB</div>
     <div class="tab" data-tab="placeholder" onclick="activateTab('placeholder')">Other</div>
   </div>
 
@@ -62,6 +64,65 @@
     </div>
 
     <div id="driversContainer" class="grid md:grid-cols-2 gap-4"></div>
+  </div>
+
+  <!-- Orders tab -->
+  <div id="orders" class="tab-content">
+    <h2 class="text-lg font-semibold mb-2">Orders</h2>
+    <div id="driverFilters" class="flex flex-wrap gap-2 mb-3"></div>
+    <div class="flex mb-3">
+      <input id="ordersSearchInput" type="text" placeholder="Search by id, phone or address" class="flex-grow border p-2 rounded" />
+      <button onclick="searchOrders()" class="ml-2 px-4 py-2 bg-blue-600 text-white rounded">Search</button>
+    </div>
+    <div class="overflow-auto max-h-96 bg-white rounded shadow">
+      <table id="ordersTable" class="min-w-max w-full text-sm">
+        <thead class="sticky top-0 bg-gray-100">
+          <tr>
+            <th class="p-2 text-left">Order</th>
+            <th class="p-2 text-left">Phone</th>
+            <th class="p-2 text-left">Address</th>
+            <th class="p-2 text-left">Status</th>
+            <th class="p-2 text-left">Cash</th>
+            <th class="p-2"></th>
+          </tr>
+        </thead>
+        <tbody id="ordersBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Parcels database tab -->
+  <div id="parcels" class="tab-content">
+    <h2 class="text-lg font-semibold mb-3">Parcels Database</h2>
+    <div class="flex flex-wrap gap-2 mb-3 items-end">
+      <select id="parcelsDriver" class="border p-1 rounded"></select>
+      <input type="date" id="parcelsStart" class="border p-1 rounded" />
+      <input type="date" id="parcelsEnd" class="border p-1 rounded" />
+      <select id="parcelsStatus" class="border p-1 rounded">
+        <option value="">Any status</option>
+        <option value="Dispatched">Dispatched</option>
+        <option value="Livré">Livré</option>
+        <option value="Returned">Returned</option>
+        <option value="Annulé">Annulé</option>
+        <option value="Refusé">Refusé</option>
+      </select>
+      <input id="parcelsSearch" placeholder="Search..." class="border p-1 rounded flex-grow" />
+      <button onclick="loadParcels()" class="px-4 py-1 bg-blue-600 text-white rounded">Apply</button>
+    </div>
+    <div class="overflow-auto max-h-[500px] bg-white rounded shadow">
+      <table id="parcelsTable" class="min-w-max w-full text-sm">
+        <thead class="sticky top-0 bg-gray-100">
+          <tr>
+            <th class="p-2 text-left">Order</th>
+            <th class="p-2 text-left">Phone</th>
+            <th class="p-2 text-left">Address</th>
+            <th class="p-2 text-left">Status</th>
+            <th class="p-2 text-left">Cash</th>
+          </tr>
+        </thead>
+        <tbody id="parcelsBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <div id="placeholder" class="tab-content">
@@ -122,6 +183,88 @@ function renderDonut(t){
   if(window.delChart)window.delChart.destroy();
   window.delChart=new Chart(ctx,{type:'doughnut',data:{labels:['Delivered','Failed','Dispatched','In Progress'],datasets:[{data:[t.delivered,t.failed,t.dispatched,t.inprog],backgroundColor:['#4caf50','#f44336','#2196f3','#ff9800']} ]},options:{responsive:true,maintainAspectRatio:false}});
 }
+
+// ----------------------- ORDERS PANEL -----------------------------
+let currentDriver=null;
+async function loadOrdersTab(){
+  const container=document.getElementById('driverFilters');
+  if(!container.childElementCount){
+    const drivers=await fetch('/drivers').then(r=>r.json()).catch(()=>[]);
+    drivers.forEach(d=>{
+      const b=document.createElement('button');
+      b.textContent=d;
+      b.className='px-3 py-1 bg-gray-200 rounded';
+      b.onclick=()=>{currentDriver=d;container.querySelectorAll('button').forEach(x=>x.classList.remove('bg-blue-600','text-white'));b.classList.add('bg-blue-600','text-white');loadOrders();};
+      container.appendChild(b);
+    });
+    if(drivers.length) container.firstChild.click();
+  }else{
+    loadOrders();
+  }
+}
+async function loadOrders(q){
+  if(!currentDriver)return;
+  let url=q?`/admin/search?q=${encodeURIComponent(q)}`:`/orders?driver=${currentDriver}`;
+  const data=await fetch(url).then(r=>r.json()).catch(()=>[]);
+  const body=document.getElementById('ordersBody');
+  body.innerHTML='';
+  data.forEach(o=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="p-2">${o.orderName}</td><td class="p-2">${o.customerPhone||''}</td><td class="p-2">${o.address||''}</td><td class="p-2">${o.deliveryStatus||''}</td><td class="p-2">${o.cashAmount||0}</td><td class="p-2"><button class="text-blue-600" onclick="markDelivered('${o.orderName}')">Deliver</button></td>`;
+    body.appendChild(tr);
+  });
+}
+function searchOrders(){
+  const q=document.getElementById('ordersSearchInput').value.trim();
+  loadOrders(q);
+}
+async function markDelivered(name){
+  if(!currentDriver)return;
+  await fetch(`/order/status?driver=${currentDriver}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_name:name,new_status:'Livré'})});
+  loadOrders();
+}
+
+// ----------------------- PARCELS DB -------------------------------
+async function loadParcelsTab(){
+  const sel=document.getElementById('parcelsDriver');
+  if(!sel.options.length){
+    const drivers=await fetch('/drivers').then(r=>r.json()).catch(()=>[]);
+    sel.innerHTML='<option value="">Select driver</option>';
+    drivers.forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});
+    if(drivers.length) sel.value=drivers[0];
+  }
+  loadParcels();
+}
+async function loadParcels(){
+  const driver=document.getElementById('parcelsDriver').value;
+  if(!driver){document.getElementById('parcelsBody').innerHTML='';return;}
+  const active=await fetch(`/orders?driver=${driver}`).then(r=>r.json()).catch(()=>[]);
+  const arch=await fetch(`/orders/archive?driver=${driver}`).then(r=>r.json()).catch(()=>[]);
+  let data=active.concat(arch);
+  const s=document.getElementById('parcelsSearch').value.toLowerCase();
+  const st=document.getElementById('parcelsStatus').value;
+  const sd=document.getElementById('parcelsStart').value;
+  const ed=document.getElementById('parcelsEnd').value;
+  data=data.filter(o=>{
+    if(st&&o.deliveryStatus!==st)return false;
+    if(sd&&o.scanDate&&o.scanDate<sd)return false;
+    if(ed&&o.scanDate&&o.scanDate>ed)return false;
+    if(s&&!(o.orderName.toLowerCase().includes(s)||(o.address||'').toLowerCase().includes(s)||(o.customerPhone||'').includes(s)))return false;
+    return true;
+  });
+  const body=document.getElementById('parcelsBody');
+  body.innerHTML='';
+  data.forEach(o=>{
+    const tr=document.createElement('tr');
+    tr.dataset.name=o.orderName;
+    tr.innerHTML=`<td class="p-2" data-field="orderName">${o.orderName}</td><td class="p-2" data-field="customerPhone">${o.customerPhone||''}</td><td class="p-2" data-field="address">${o.address||''}</td><td class="p-2" data-field="deliveryStatus">${o.deliveryStatus||''}</td><td class="p-2" data-field="cashAmount">${o.cashAmount||0}</td>`;
+    body.appendChild(tr);
+  });
+}
+document.getElementById('parcelsBody').addEventListener('dblclick',async e=>{
+  const td=e.target.closest('td[data-field]');
+  if(!td)return;const field=td.dataset.field;const row=td.parentNode.dataset.name;const val=prompt(`Edit ${field}`,td.textContent);if(val===null)return;td.textContent=val;const driver=document.getElementById('parcelsDriver').value;let payload={order_name:row};if(field==='deliveryStatus')payload.new_status=val;else if(field==='cashAmount')payload.cash_amount=parseFloat(val)||0;else if(field==='address'||field==='customerPhone')payload.note=val;await fetch(`/order/status?driver=${driver}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+});
 document.addEventListener('DOMContentLoaded',()=>{
   const {start,end}=computeDefaultDates();
   document.getElementById('startDate').value=start;
