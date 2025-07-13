@@ -44,7 +44,6 @@ from .db import (
     Payout,
     EmployeeLog,
     Merchant,
-    CityFee,
 )
 from passlib.hash import bcrypt
 
@@ -129,11 +128,6 @@ class PayoutUpdate(BaseModel):
     total_fees: Optional[float] = None
     total_payout: Optional[float] = None
     date_created: Optional[str] = None
-
-
-class CityFeeIn(BaseModel):
-    city: str
-    fee: float
 
 
 # ───────────────────────────────────────────────────────────────
@@ -308,59 +302,6 @@ async def merchant_login(merchant_id: str = Form(...), password: str = Form(...)
         return {"success": True}
 
 
-@app.get("/merchant/{merchant_id}/fees", tags=["merchant"])
-async def list_fees(merchant_id: str):
-    """Return all city fees for a merchant."""
-    async for session in get_session():
-        result = await session.execute(
-            select(CityFee).where(CityFee.merchant_id == merchant_id)
-        )
-        fees = [
-            {"city": f.city, "fee": f.fee}
-            for f in result.scalars().all()
-        ]
-        return fees
-
-
-@app.post("/merchant/{merchant_id}/fees", tags=["merchant"])
-async def set_fee(merchant_id: str, payload: CityFeeIn):
-    """Create or update a city fee for a merchant."""
-    async for session in get_session():
-        fee = await session.scalar(
-            select(CityFee).where(
-                CityFee.merchant_id == merchant_id,
-                CityFee.city.ilike(payload.city),
-            )
-        )
-        if fee:
-            fee.fee = payload.fee
-        else:
-            fee = CityFee(
-                merchant_id=merchant_id,
-                city=payload.city,
-                fee=payload.fee,
-            )
-            session.add(fee)
-        await session.commit()
-        return {"success": True}
-
-
-@app.delete("/merchant/{merchant_id}/fees/{city}", tags=["merchant"])
-async def delete_fee(merchant_id: str, city: str):
-    async for session in get_session():
-        fee = await session.scalar(
-            select(CityFee).where(
-                CityFee.merchant_id == merchant_id,
-                CityFee.city.ilike(city),
-            )
-        )
-        if not fee:
-            raise HTTPException(status_code=404, detail="Fee not found")
-        await session.delete(fee)
-        await session.commit()
-        return {"success": True}
-
-
 @app.get("/drivers")
 async def list_drivers():
     async for session in get_session():
@@ -394,22 +335,6 @@ def calculate_driver_fee(tags: str) -> int:
     return (
         EXCHANGE_DELIVERY_FEE if "ch" in (tags or "").lower() else NORMAL_DELIVERY_FEE
     )
-
-
-async def driver_fee_for_order(
-    session: AsyncSession, merchant_id: str, city: str, tags: str
-) -> float:
-    """Return the fee for a given merchant/city combo with fallback."""
-    result = await session.execute(
-        select(CityFee.fee).where(
-            CityFee.merchant_id == merchant_id,
-            CityFee.city.ilike(city),
-        )
-    )
-    fee = result.scalar()
-    if fee is not None:
-        return fee
-    return calculate_driver_fee(tags)
 
 
 def get_primary_display_tag(tags: str) -> str:
@@ -667,7 +592,6 @@ async def scan(
             "closed" if (chosen_order and chosen_order.get("cancelled_at")) else "open"
         )
         customer_name = phone = address = ""
-        city = ""
         cash_amount = 0.0
         result_msg = "❌ Not found"
 
@@ -697,11 +621,10 @@ async def scan(
                         ],
                     )
                 )
-                city = sa.get("city", "")
 
         now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         scan_day = dt.datetime.now().strftime("%Y-%m-%d")
-        driver_fee = await driver_fee_for_order(session, merchant, city, tags)
+        driver_fee = calculate_driver_fee(tags)
 
         order = Order(
             driver_id=driver,
@@ -711,7 +634,6 @@ async def scan(
             customer_name=customer_name,
             customer_phone=phone,
             address=address,
-            city=city,
             tags=tags,
             fulfillment=fulfillment,
             order_status=order_status,
@@ -967,9 +889,7 @@ async def update_order_status(
             order.follow_log = payload.follow_log
 
         if payload.new_status == "Livré" and prev_status != "Livré":
-            driver_fee = await driver_fee_for_order(
-                session, merchant, order.city or "", order.tags
-            )
+            driver_fee = calculate_driver_fee(order.tags)
             cash_amt = payload.cash_amount or (order.cash_amount or 0)
             payout_id = await add_to_payout(
                 session, driver, payload.order_name, cash_amt, driver_fee

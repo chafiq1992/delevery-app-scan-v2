@@ -38,16 +38,6 @@ class Merchant(Base):
     name = Column(String)
     password_hash = Column(String)
 
-
-class CityFee(Base):
-    __tablename__ = "city_fees"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    merchant_id = Column(String, ForeignKey("merchants.id"), index=True)
-    city = Column(String, index=True)
-    fee = Column(Float)
-
-    merchant = relationship("Merchant")
-
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -58,7 +48,6 @@ class Order(Base):
     customer_name = Column(String)
     customer_phone = Column(String)
     address = Column(Text)
-    city = Column(String)
     tags = Column(String)
     fulfillment = Column(String)
     order_status = Column(String)
@@ -138,15 +127,6 @@ async def init_db() -> None:
         )
         if not result.first():
             await conn.execute(text("ALTER TABLE orders ADD COLUMN merchant_id VARCHAR"))
-
-        result = await conn.execute(
-            text(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='orders' AND column_name='city'"
-            )
-        )
-        if not result.first():
-            await conn.execute(text("ALTER TABLE orders ADD COLUMN city VARCHAR"))
 
     default_drivers = ["abderrehman", "anouar", "mohammed", "nizar"]
     default_merchants = [
