@@ -36,7 +36,16 @@ from pydantic import BaseModel
 
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from .db import get_session, init_db, Driver, Order, Payout, EmployeeLog
+from .db import (
+    get_session,
+    init_db,
+    Driver,
+    Order,
+    Payout,
+    EmployeeLog,
+    Merchant,
+)
+from passlib.hash import bcrypt
 
 # ───────────────────────────────────────────────────────────────
 # CONFIGURATION  ––––– edit via env-vars in Render dashboard
@@ -266,6 +275,33 @@ async def follow_login(password: str = Form(...)):
     raise HTTPException(status_code=401, detail="Invalid follow password")
 
 
+@app.post("/merchant/register")
+async def merchant_register(
+    merchant_id: str = Form(...), name: str = Form(...), password: str = Form(...)
+):
+    async for session in get_session():
+        if await session.get(Merchant, merchant_id):
+            raise HTTPException(status_code=400, detail="Merchant exists")
+        session.add(
+            Merchant(
+                id=merchant_id,
+                name=name,
+                password_hash=bcrypt.hash(password),
+            )
+        )
+        await session.commit()
+        return {"success": True}
+
+
+@app.post("/merchant/login")
+async def merchant_login(merchant_id: str = Form(...), password: str = Form(...)):
+    async for session in get_session():
+        merchant = await session.get(Merchant, merchant_id)
+        if not merchant or not bcrypt.verify(password, merchant.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid merchant credentials")
+        return {"success": True}
+
+
 @app.get("/drivers")
 async def list_drivers():
     async for session in get_session():
@@ -400,21 +436,27 @@ PAYOUT_HEADER = [
 EMPLOYEE_HEADER = ["Timestamp", "Employee", "Order Number", "Amount"]
 
 
-async def order_exists(session: AsyncSession, driver_id: str, order_name: str) -> bool:
+async def order_exists(
+    session: AsyncSession, merchant_id: str, driver_id: str, order_name: str
+) -> bool:
     result = await session.scalar(
         select(Order).where(
-            Order.driver_id == driver_id, Order.order_name == order_name
+            Order.merchant_id == merchant_id,
+            Order.driver_id == driver_id,
+            Order.order_name == order_name,
         )
     )
     return result is not None
 
 
 async def get_order_row(
-    session: AsyncSession, driver_id: str, order_name: str
+    session: AsyncSession, merchant_id: str, driver_id: str, order_name: str
 ) -> Optional[Order]:
     return await session.scalar(
         select(Order).where(
-            Order.driver_id == driver_id, Order.order_name == order_name
+            Order.merchant_id == merchant_id,
+            Order.driver_id == driver_id,
+            Order.order_name == order_name,
         )
     )
 
@@ -501,7 +543,9 @@ def health():
 # -------------------------------  SCAN  -------------------------------
 @app.post("/scan", response_model=ScanResult, tags=["orders"])
 async def scan(
-    payload: ScanIn, driver: str = Query(..., description="driver1 / driver2 / …")
+    payload: ScanIn,
+    driver: str = Query(..., description="driver1 / driver2 / …"),
+    merchant: str = Query(...),
 ):
     async for session in get_session():
         await get_driver(session, driver)
@@ -511,8 +555,8 @@ async def scan(
         if len(order_number) <= 1:
             raise HTTPException(status_code=400, detail="Invalid barcode")
 
-        if await order_exists(session, driver, order_number):
-            existing = await get_order_row(session, driver, order_number)
+        if await order_exists(session, merchant, driver, order_number):
+            existing = await get_order_row(session, merchant, driver, order_number)
             return ScanResult(
                 result="⚠️ Already scanned",
                 order=order_number,
@@ -584,6 +628,7 @@ async def scan(
 
         order = Order(
             driver_id=driver,
+            merchant_id=merchant,
             timestamp=dt.datetime.strptime(now_ts, "%Y-%m-%d %H:%M:%S"),
             order_name=order_number,
             customer_name=customer_name,
@@ -604,7 +649,7 @@ async def scan(
         session.add(order)
         await session.commit()
 
-        await cache_delete("orders", driver)
+        await cache_delete("orders", f"{merchant}:{driver}")
         await manager.broadcast({
             "type": "new_order",
             "driver": driver,
@@ -621,8 +666,9 @@ async def scan(
 
 # -----------------------------  ORDERS  -------------------------------
 @app.get("/orders", tags=["orders"])
-async def list_active_orders(driver: str = Query(...)):
-    cached = await cache_get("orders", driver)
+async def list_active_orders(driver: str = Query(...), merchant: str = Query(...)):
+    cache_key = f"{merchant}:{driver}"
+    cached = await cache_get("orders", cache_key)
     if cached is not None:
         return cached
 
@@ -630,6 +676,7 @@ async def list_active_orders(driver: str = Query(...)):
         await get_driver(session, driver)
         result = await session.execute(
             select(Order).where(
+                Order.merchant_id == merchant,
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
             )
@@ -681,13 +728,14 @@ async def list_active_orders(driver: str = Query(...)):
         else:
             o["urgent"] = False
 
-    await cache_set("orders", driver, active)
+    await cache_set("orders", cache_key, active)
     return active
 
 
 @app.get("/orders/archive", tags=["orders"])
-async def list_archived_orders(driver: str = Query(...)):
-    cached = await cache_get("archive", driver)
+async def list_archived_orders(driver: str = Query(...), merchant: str = Query(...)):
+    cache_key = f"{merchant}:{driver}"
+    cached = await cache_get("archive", cache_key)
     if cached is not None:
         return cached
 
@@ -696,6 +744,7 @@ async def list_archived_orders(driver: str = Query(...)):
         result = await session.execute(
             select(Order)
             .where(
+                Order.merchant_id == merchant,
                 Order.driver_id == driver,
                 Order.delivery_status.in_(COMPLETED_STATUSES),
             )
@@ -727,13 +776,14 @@ async def list_archived_orders(driver: str = Query(...)):
                 }
             )
 
-    await cache_set("archive", driver, archived)
+    await cache_set("archive", cache_key, archived)
     return archived
 
 
 @app.get("/orders/followups", tags=["orders"])
-async def list_followup_orders(driver: str = Query(...)):
-    cached = await cache_get("followups", driver)
+async def list_followup_orders(driver: str = Query(...), merchant: str = Query(...)):
+    cache_key = f"{merchant}:{driver}"
+    cached = await cache_get("followups", cache_key)
     if cached is not None:
         return cached
 
@@ -741,6 +791,7 @@ async def list_followup_orders(driver: str = Query(...)):
         await get_driver(session, driver)
         result = await session.execute(
             select(Order).where(
+                Order.merchant_id == merchant,
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
             )
@@ -795,20 +846,23 @@ async def list_followup_orders(driver: str = Query(...)):
                     }
                 )
 
-    await cache_set("followups", driver, followups)
+    await cache_set("followups", cache_key, followups)
     return followups
 
 
 @app.put("/order/status", tags=["orders"])
 async def update_order_status(
-    payload: StatusUpdate, bg: BackgroundTasks, driver: str = Query(...)
+    payload: StatusUpdate,
+    bg: BackgroundTasks,
+    driver: str = Query(...),
+    merchant: str = Query(...),
 ):
     if payload.new_status and payload.new_status not in DELIVERY_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
 
     async for session in get_session():
         await get_driver(session, driver)
-        order = await get_order_row(session, driver, payload.order_name)
+        order = await get_order_row(session, merchant, driver, payload.order_name)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
@@ -860,8 +914,9 @@ async def update_order_status(
 
         await session.commit()
 
-        await cache_delete("orders", driver)
-        await cache_delete("payouts", driver)
+        key = f"{merchant}:{driver}"
+        await cache_delete("orders", key)
+        await cache_delete("payouts", key)
         await manager.broadcast({
             "type": "status_update",
             "driver": driver,
@@ -873,8 +928,9 @@ async def update_order_status(
 
 # ----------------------------  PAYOUTS  -------------------------------
 @app.get("/payouts", tags=["payouts"])
-async def get_payouts(driver: str = Query(...)):
-    cached = await cache_get("payouts", driver)
+async def get_payouts(driver: str = Query(...), merchant: str = Query(...)):
+    cache_key = f"{merchant}:{driver}"
+    cached = await cache_get("payouts", cache_key)
     if cached is not None:
         return cached
 
@@ -890,13 +946,18 @@ async def get_payouts(driver: str = Query(...)):
         for p in rows:
             orders_list = [o.strip() for o in (p.orders or "").split(",") if o.strip()]
             order_details = []
+            total_cash = total_fees = 0.0
             for name in orders_list:
                 order = await session.scalar(
                     select(Order).where(
-                        Order.driver_id == driver, Order.order_name == name
+                        Order.merchant_id == merchant,
+                        Order.driver_id == driver,
+                        Order.order_name == name,
                     )
                 )
                 if order:
+                    total_cash += order.cash_amount or 0
+                    total_fees += order.driver_fee or 0
                     order_details.append(
                         {
                             "name": name,
@@ -904,19 +965,18 @@ async def get_payouts(driver: str = Query(...)):
                             "driverFee": order.driver_fee or 0,
                         }
                     )
-                else:
-                    order_details.append(
-                        {"name": name, "cashAmount": 0.0, "driverFee": 0.0}
-                    )
+
+            if not order_details:
+                continue
 
             payouts.append(
                 {
                     "payoutId": p.payout_id,
                     "dateCreated": p.date_created.strftime("%Y-%m-%d %H:%M:%S"),
-                    "orders": p.orders,
-                    "totalCash": p.total_cash or 0,
-                    "totalFees": p.total_fees or 0,
-                    "totalPayout": p.total_payout or 0,
+                    "orders": ", ".join([d["name"] for d in order_details]),
+                    "totalCash": total_cash,
+                    "totalFees": total_fees,
+                    "totalPayout": total_cash - total_fees,
                     "status": p.status or "pending",
                     "datePaid": (
                         p.date_paid.strftime("%Y-%m-%d %H:%M:%S") if p.date_paid else ""
@@ -925,12 +985,12 @@ async def get_payouts(driver: str = Query(...)):
                 }
             )
 
-        await cache_set("payouts", driver, payouts)
+        await cache_set("payouts", cache_key, payouts)
         return payouts
 
 
 @app.post("/payout/mark-paid/{payout_id}", tags=["payouts"])
-async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
+async def mark_payout_paid(payout_id: str, driver: str = Query(...), merchant: str = Query(...)):
     async for session in get_session():
         await get_driver(session, driver)
         payout = await session.scalar(
@@ -945,13 +1005,19 @@ async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
         payout.date_paid = dt.datetime.utcnow()
         await session.commit()
 
-        await cache_delete("payouts", driver)
-        await cache_delete("orders", driver)
+        key = f"{merchant}:{driver}"
+        await cache_delete("payouts", key)
+        await cache_delete("orders", key)
         return {"success": True}
 
 
 @app.put("/payout/{payout_id}", tags=["payouts"])
-async def update_payout(payout_id: str, payload: PayoutUpdate, driver: str = Query(...)):
+async def update_payout(
+    payout_id: str,
+    payload: PayoutUpdate,
+    driver: str = Query(...),
+    merchant: str = Query(...),
+):
     async for session in get_session():
         await get_driver(session, driver)
         payout = await session.scalar(
@@ -977,13 +1043,14 @@ async def update_payout(payout_id: str, payload: PayoutUpdate, driver: str = Que
             payout.total_payout = (payout.total_cash or 0) - (payout.total_fees or 0)
 
         await session.commit()
-        await cache_delete("payouts", driver)
+        await cache_delete("payouts", f"{merchant}:{driver}")
         return {"success": True}
 
 
 # ----------------------------  STATS  -------------------------------
 async def _compute_stats(
     session: AsyncSession,
+    merchant: str | None,
     driver: str,
     days: int | None = None,
     start: str | None = None,
@@ -991,6 +1058,8 @@ async def _compute_stats(
 ) -> dict:
     await get_driver(session, driver)
     q = select(Order).where(Order.driver_id == driver)
+    if merchant:
+        q = q.where(Order.merchant_id == merchant)
 
     if start:
         try:
@@ -1061,12 +1130,13 @@ async def _compute_stats(
 @app.get("/stats", tags=["stats"])
 async def get_stats(
     driver: str = Query(...),
+    merchant: str = Query(...),
     days: int | None = Query(None),
     start: str | None = Query(None),
     end: str | None = Query(None),
 ):
     async for session in get_session():
-        stats = await _compute_stats(session, driver, days, start, end)
+        stats = await _compute_stats(session, merchant, driver, days, start, end)
         return stats
 
 
@@ -1080,7 +1150,7 @@ async def admin_stats(
         drivers = await load_drivers(session)
         result = {}
         for d in drivers.keys():
-            result[d] = await _compute_stats(session, d, days, start, end)
+            result[d] = await _compute_stats(session, None, d, days, start, end)
         return result
 
 
