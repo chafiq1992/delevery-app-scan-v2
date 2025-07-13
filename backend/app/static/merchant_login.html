@@ -25,7 +25,13 @@ function login(){
   const id=document.getElementById('merchantId').value.trim();
   const pw=document.getElementById('merchantPassword').value.trim();
   fetch('/merchant/login',{method:'POST',body:new URLSearchParams({merchant_id:id,password:pw})})
-    .then(r=>r.ok?location.href='/static/merchant_dashboard.html':alert('Invalid credentials'));
+    .then(r=>{
+      if(r.ok){
+        location.href='/static/merchant_dashboard.html?merchant='+encodeURIComponent(id);
+      }else{
+        alert('Invalid credentials');
+      }
+    });
 }
 </script>
 </body>
