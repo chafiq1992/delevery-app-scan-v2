@@ -16,24 +16,13 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 import json
-import csv
-import io
 import datetime as dt
 from typing import List, Optional
 from datetime import timezone
 import httpx
-from fastapi import (
-    FastAPI,
-    HTTPException,
-    BackgroundTasks,
-    Query,
-    WebSocket,
-    WebSocketDisconnect,
-    Form,
-    UploadFile,
-    File,
-)
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Form
 from cachetools import TTLCache
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -370,151 +359,6 @@ async def delete_fee(merchant_id: str, city: str):
         await session.delete(fee)
         await session.commit()
         return {"success": True}
-
-
-@app.get("/merchant/orders", tags=["merchant"])
-async def merchant_orders(merchant_id: str = Query(...)):
-    """Return all orders for a merchant across drivers."""
-    async for session in get_session():
-        result = await session.execute(
-            select(Order).where(Order.merchant_id == merchant_id)
-        )
-        rows = result.scalars().all()
-        orders: list[dict] = []
-        for o in rows:
-            orders.append(
-                {
-                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                    "driver": o.driver_id,
-                    "orderName": o.order_name,
-                    "customerName": o.customer_name,
-                    "customerPhone": o.customer_phone,
-                    "address": o.address,
-                    "tags": o.tags,
-                    "deliveryStatus": o.delivery_status or "Dispatched",
-                    "notes": o.notes,
-                    "driverNotes": o.driver_notes,
-                    "scheduledTime": o.scheduled_time,
-                    "scanDate": o.scan_date,
-                    "cashAmount": o.cash_amount or 0,
-                    "driverFee": o.driver_fee or 0,
-                    "payoutId": o.payout_id,
-                    "statusLog": o.status_log,
-                    "commLog": o.comm_log,
-                    "followLog": o.follow_log,
-                }
-            )
-        orders.sort(key=lambda r: r["timestamp"])
-        return orders
-
-
-@app.get("/merchant/payouts", tags=["merchant"])
-async def merchant_payouts(merchant_id: str = Query(...)):
-    """Return payout info for a merchant grouped by driver."""
-    async for session in get_session():
-        result = await session.execute(
-            select(Order).where(
-                Order.merchant_id == merchant_id, Order.payout_id.is_not(None)
-            )
-        )
-        orders = result.scalars().all()
-        payouts: dict[tuple[str, str], dict] = {}
-        for o in orders:
-            payout = await session.scalar(
-                select(Payout).where(Payout.payout_id == o.payout_id)
-            )
-            if not payout:
-                continue
-            key = (payout.payout_id, o.driver_id)
-            p = payouts.get(key)
-            if not p:
-                p = {
-                    "payoutId": payout.payout_id,
-                    "driver": o.driver_id,
-                    "dateCreated": payout.date_created.strftime("%Y-%m-%d %H:%M:%S"),
-                    "status": payout.status or "pending",
-                    "datePaid": (
-                        payout.date_paid.strftime("%Y-%m-%d %H:%M:%S")
-                        if payout.date_paid
-                        else ""
-                    ),
-                    "orders": [],
-                    "totalCash": 0.0,
-                    "totalFees": 0.0,
-                    "totalPayout": 0.0,
-                }
-                payouts[key] = p
-            p["orders"].append(o.order_name)
-            p["totalCash"] += o.cash_amount or 0
-            p["totalFees"] += o.driver_fee or 0
-            p["totalPayout"] = p["totalCash"] - p["totalFees"]
-        return [
-            {
-                **p,
-                "orders": ", ".join(p["orders"]),
-            }
-            for p in payouts.values()
-        ]
-
-
-@app.post("/merchant/upload-orders", tags=["merchant"])
-async def upload_orders(
-    merchant_id: str = Form(...),
-    file: UploadFile | None = File(None),
-    orders: str | None = Form(None),
-):
-    """Upload new orders for a merchant via CSV file or JSON list."""
-    if not file and not orders:
-        raise HTTPException(status_code=400, detail="Provide file or orders data")
-
-    order_rows = []
-    if file:
-        content = (await file.read()).decode()
-        reader = csv.DictReader(io.StringIO(content))
-        for row in reader:
-            order_rows.append(row)
-    elif orders:
-        try:
-            parsed = json.loads(orders)
-            if isinstance(parsed, dict):
-                order_rows.append(parsed)
-            else:
-                order_rows.extend(parsed)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid orders JSON")
-
-    added = 0
-    async for session in get_session():
-        for row in order_rows:
-            driver_id = (row.get("driver_id") or row.get("driver") or "").strip()
-            order_name = (row.get("order_name") or row.get("order") or "").strip()
-            if not driver_id or not order_name:
-                continue
-            order = Order(
-                driver_id=driver_id,
-                merchant_id=merchant_id,
-                order_name=order_name,
-                customer_name=row.get("customer_name"),
-                customer_phone=row.get("customer_phone"),
-                address=row.get("address"),
-                city=row.get("city"),
-                tags=row.get("tags"),
-                cash_amount=safe_float(row.get("cash_amount")),
-                delivery_status="Dispatched",
-                scan_date=dt.datetime.utcnow().strftime("%Y-%m-%d"),
-            )
-            session.add(order)
-            added += 1
-        await session.commit()
-
-        for row in order_rows:
-            drv = row.get("driver_id") or row.get("driver")
-            if drv:
-                key = f"{merchant_id}:{drv}"
-                await cache_delete("orders", key)
-                await cache_delete("archive", key)
-
-        return {"success": True, "added": added}
 
 
 @app.get("/drivers")
