@@ -5,11 +5,64 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Merchant Dashboard</title>
   <style>
-    body{font-family:sans-serif;background:linear-gradient(to bottom,#f5f7fa,#e2e8f0);min-height:100vh;margin:0;padding:1rem;text-align:center;}
+    body{font-family:sans-serif;background:#f5f7fa;margin:0;padding:1rem;}
+    h1{text-align:center;color:#004aad;margin-bottom:1rem;}
+    table{width:100%;border-collapse:collapse;margin-top:0.5rem;}
+    th,td{border:1px solid #ddd;padding:0.5rem;text-align:left;}
+    th{background:#f0f0f0;}
+    .summary{display:flex;gap:1rem;justify-content:center;margin:1rem 0;flex-wrap:wrap;}
+    .summary div{background:white;padding:0.6rem 1rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);}  
   </style>
 </head>
 <body>
-  <h1 style="color:#004aad;margin-bottom:1rem;">Merchant Dashboard</h1>
-  <p>Welcome!</p>
+  <h1>Merchant Dashboard</h1>
+  <div class="summary" id="stats"></div>
+  <h2>Orders</h2>
+  <table id="ordersTable">
+    <thead><tr><th>Order</th><th>Driver</th><th>Status</th><th>Cash</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <h2>Payouts</h2>
+  <table id="payoutsTable">
+    <thead><tr><th>Payout</th><th>Driver</th><th>Cash</th><th>Fees</th><th>Net</th><th>Status</th></tr></thead>
+    <tbody></tbody>
+  </table>
+<script>
+const params=new URLSearchParams(location.search);
+const merchant=params.get('merchant');
+if(!merchant){document.body.innerHTML='<p>Missing merchant id</p>';throw new Error('no id');}
+let orders=[];
+async function loadOrders(){
+  const r=await fetch('/merchant/orders?merchant_id='+merchant);
+  orders=await r.json();
+  const tbody=document.querySelector('#ordersTable tbody');
+  tbody.innerHTML='';
+  orders.forEach(o=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${o.orderName}</td><td>${o.driver}</td><td>${o.deliveryStatus}</td><td>${o.cashAmount||0}</td>`;
+    tbody.appendChild(tr);
+  });
+  updateStats();
+}
+function updateStats(){
+  const total=orders.length;
+  const delivered=orders.filter(o=>o.deliveryStatus==='Livré').length;
+  const returned=orders.filter(o=>['Returned','Annulé','Refusé'].includes(o.deliveryStatus)).length;
+  const cash=orders.filter(o=>o.deliveryStatus==='Livré').reduce((s,o)=>s+(o.cashAmount||0),0);
+  document.getElementById('stats').innerHTML=`<div>Total: ${total}</div><div>Delivered: ${delivered}</div><div>Returned: ${returned}</div><div>Cash: ${cash}</div>`;
+}
+async function loadPayouts(){
+  const r=await fetch('/merchant/payouts?merchant_id='+merchant);
+  const payouts=await r.json();
+  const tbody=document.querySelector('#payoutsTable tbody');
+  tbody.innerHTML='';
+  payouts.forEach(p=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${p.payoutId}</td><td>${p.driver}</td><td>${p.totalCash}</td><td>${p.totalFees}</td><td>${p.totalPayout}</td><td>${p.status}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+document.addEventListener('DOMContentLoaded',()=>{loadOrders();loadPayouts();});
+</script>
 </body>
 </html>
