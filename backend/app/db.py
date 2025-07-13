@@ -11,6 +11,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
+from passlib.hash import bcrypt
 import os
 from datetime import datetime
 
@@ -30,15 +31,34 @@ class Driver(Base):
     order_tab = Column(String)
     payouts_tab = Column(String)
 
+
+class Merchant(Base):
+    __tablename__ = "merchants"
+    id = Column(String, primary_key=True)
+    name = Column(String)
+    password_hash = Column(String)
+
+
+class CityFee(Base):
+    __tablename__ = "city_fees"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    merchant_id = Column(String, ForeignKey("merchants.id"), index=True)
+    city = Column(String, index=True)
+    fee = Column(Float)
+
+    merchant = relationship("Merchant")
+
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, autoincrement=True)
     driver_id = Column(String, ForeignKey("drivers.id"), index=True)
+    merchant_id = Column(String, ForeignKey("merchants.id"), index=True)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     order_name = Column(String, index=True)
     customer_name = Column(String)
     customer_phone = Column(String)
     address = Column(Text)
+    city = Column(String)
     tags = Column(String)
     fulfillment = Column(String)
     order_status = Column(String)
@@ -56,6 +76,7 @@ class Order(Base):
     follow_log = Column(Text)
 
     driver = relationship("Driver")
+    merchant = relationship("Merchant")
 
 class Payout(Base):
     __tablename__ = "payouts"
@@ -109,9 +130,40 @@ async def init_db() -> None:
         if not result.first():
             await conn.execute(text("ALTER TABLE orders ADD COLUMN driver_notes TEXT"))
 
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='orders' AND column_name='merchant_id'"
+            )
+        )
+        if not result.first():
+            await conn.execute(text("ALTER TABLE orders ADD COLUMN merchant_id VARCHAR"))
+
+        result = await conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='orders' AND column_name='city'"
+            )
+        )
+        if not result.first():
+            await conn.execute(text("ALTER TABLE orders ADD COLUMN city VARCHAR"))
+
     default_drivers = ["abderrehman", "anouar", "mohammed", "nizar"]
+    default_merchants = [
+        {"id": "demo", "name": "Demo Merchant", "password": "demo123"},
+    ]
     async with AsyncSessionLocal() as session:
         for d_id in default_drivers:
             if not await session.get(Driver, d_id):
                 session.add(Driver(id=d_id))
+
+        for m in default_merchants:
+            if not await session.get(Merchant, m["id"]):
+                session.add(
+                    Merchant(
+                        id=m["id"],
+                        name=m["name"],
+                        password_hash=bcrypt.hash(m["password"]),
+                    )
+                )
         await session.commit()
