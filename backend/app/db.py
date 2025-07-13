@@ -8,6 +8,10 @@ from sqlalchemy import (
     ForeignKey,
     select,
     text,
+    create_engine,
+    MetaData,
+    Table,
+    Date,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
@@ -115,3 +119,40 @@ async def init_db() -> None:
             if not await session.get(Driver, d_id):
                 session.add(Driver(id=d_id))
         await session.commit()
+
+
+# ───────────────────────────────────────────────────────────────
+# Attendance tables
+# ───────────────────────────────────────────────────────────────
+
+# Use synchronous SQLAlchemy engine for simple attendance tracking
+ATTENDANCE_DB_URL = os.getenv("DATABASE_URL", "sqlite:///attendance.db")
+sync_engine = create_engine(ATTENDANCE_DB_URL)
+attendance_metadata = MetaData()
+
+
+def ensure_employee_table(name: str) -> Table:
+    """Return SQLAlchemy Table for `name`, creating it if missing."""
+    table_name = f"attendance_{name.lower()}"
+    # Reflect to load existing tables
+    attendance_metadata.reflect(bind=sync_engine)
+
+    if table_name not in attendance_metadata.tables:
+        Table(
+            table_name,
+            attendance_metadata,
+            Column("id", Integer, primary_key=True),
+            Column("date", Date, nullable=False, unique=True),
+            Column("clock_in", String(5)),
+            Column("clock_out", String(5)),
+            Column("break_start", String(5)),
+            Column("break_end", String(5)),
+            Column("extra_start", String(5)),
+            Column("extra_end", String(5)),
+            Column("extra_hours", String(5)),
+            Column("cash", Integer, default=0),
+            Column("advance", Integer, default=0),
+            Column("orders", Integer, default=0),
+        )
+        attendance_metadata.create_all(bind=sync_engine, tables=[attendance_metadata.tables[table_name]])
+    return attendance_metadata.tables[table_name]
