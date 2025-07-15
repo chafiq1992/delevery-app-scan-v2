@@ -105,6 +105,8 @@
         <tbody id="ordersBody"></tbody>
       </table>
     </div>
+    <h3 class="text-lg font-semibold mt-4">Delivery Notes</h3>
+    <div id="adminNotes" class="space-y-2"></div>
   </div>
 
   <!-- Parcels database tab -->
@@ -248,12 +250,13 @@ async function loadOrdersTab(){
       const b=document.createElement('button');
       b.textContent=d;
       b.className='px-3 py-1 bg-gray-200 rounded';
-      b.onclick=()=>{currentDriver=d;container.querySelectorAll('button').forEach(x=>x.classList.remove('bg-blue-600','text-white'));b.classList.add('bg-blue-600','text-white');loadOrders();};
+      b.onclick=()=>{currentDriver=d;container.querySelectorAll('button').forEach(x=>x.classList.remove('bg-blue-600','text-white'));b.classList.add('bg-blue-600','text-white');loadOrders();loadAdminNotes();};
       container.appendChild(b);
     });
     if(drivers.length) container.firstChild.click();
   }else{
     loadOrders();
+    loadAdminNotes();
   }
 }
 async function loadOrders(q){
@@ -268,14 +271,25 @@ async function loadOrders(q){
     body.appendChild(tr);
   });
 }
+async function loadAdminNotes(){
+  if(!currentDriver)return;
+  const data=await fetch(`/admin/notes?driver=${currentDriver}`).then(r=>r.json()).catch(()=>[]);
+  const c=document.getElementById('adminNotes');
+  c.innerHTML=data.map(n=>{
+    const items=n.items.map(i=>`<li>${i.orderName} - ${i.status}</li>`).join('');
+    return `<div class="border rounded"><div class="bg-gray-100 p-2 cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')"><strong>#${n.id}</strong> ${n.createdAt} <span class='ml-2 text-sm'>${n.summary.delivered}✓ / ${n.summary.cancelled}✖ / ${n.summary.returned}↩</span></div><div class="hidden p-2"><ul class='list-disc pl-5'>${items}</ul></div></div>`;
+  }).join('');
+}
 function searchOrders(){
   const q=document.getElementById('ordersSearchInput').value.trim();
   loadOrders(q);
+  loadAdminNotes();
 }
 async function markDelivered(name){
   if(!currentDriver)return;
   await fetch(`/order/status?driver=${currentDriver}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_name:name,new_status:'Livré'})});
   loadOrders();
+  loadAdminNotes();
 }
 
 // ----------------------- PARCELS DB -------------------------------
@@ -374,6 +388,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('payoutsEnd').value=end;
   const sel=document.getElementById('presetRanges');if(sel) sel.value='';
   loadOverview();
+  const wsProtocol=location.protocol==='https:'?'wss':'ws';
+  const ws=new WebSocket(`${wsProtocol}://${location.host}/ws`);
+  ws.onmessage=evt=>{try{const m=JSON.parse(evt.data);if((m.type==='note_update'||m.type==='note_approved')&&m.driver===currentDriver){loadAdminNotes();}}catch(e){}};
 });
 </script>
 </body>

@@ -20,7 +20,14 @@ import datetime as dt
 from typing import List, Optional
 from datetime import timezone
 import httpx
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    BackgroundTasks,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Form
 from cachetools import TTLCache
@@ -170,6 +177,7 @@ payouts_cache = TTLCache(maxsize=8, ttl=60)
 archive_cache = TTLCache(maxsize=8, ttl=60)
 followups_cache = TTLCache(maxsize=8, ttl=60)
 
+
 async def cache_get(namespace: str, key: str):
     if redis_client:
         val = await redis_client.hget(namespace, key)
@@ -181,6 +189,7 @@ async def cache_get(namespace: str, key: str):
         "followups": followups_cache,
     }[namespace]
     return cache.get(key)
+
 
 async def cache_set(namespace: str, key: str, value, ttl: int = 60):
     if redis_client:
@@ -194,6 +203,7 @@ async def cache_set(namespace: str, key: str, value, ttl: int = 60):
             "followups": followups_cache,
         }[namespace]
         cache[key] = value
+
 
 async def cache_delete(namespace: str, key: str):
     if redis_client:
@@ -429,9 +439,7 @@ async def get_order_row(
     )
 
 
-async def get_open_delivery_note(
-    session: AsyncSession, driver_id: str
-) -> DeliveryNote:
+async def get_open_delivery_note(session: AsyncSession, driver_id: str) -> DeliveryNote:
     note = await session.scalar(
         select(DeliveryNote).where(
             DeliveryNote.driver_id == driver_id, DeliveryNote.status == "draft"
@@ -640,11 +648,13 @@ async def scan(
         await session.commit()
 
         await cache_delete("orders", driver)
-        await manager.broadcast({
-            "type": "new_order",
-            "driver": driver,
-            "order": order_number,
-        })
+        await manager.broadcast(
+            {
+                "type": "new_order",
+                "driver": driver,
+                "order": order_number,
+            }
+        )
 
         return ScanResult(
             result=result_msg,
@@ -656,6 +666,7 @@ async def scan(
 
 
 # -----------------------  DELIVERY NOTES  ------------------------
+
 
 @app.get("/notes", tags=["notes"])
 async def list_notes(driver: str = Query(...), history: bool = Query(False)):
@@ -705,13 +716,50 @@ async def get_note(note_id: int, driver: str = Query(...)):
         for it in item_rows.scalars():
             o = await session.get(Order, it.order_id)
             if o:
-                items.append({"orderName": o.order_name, "cashAmount": o.cash_amount or 0})
+                items.append(
+                    {"orderName": o.order_name, "cashAmount": o.cash_amount or 0}
+                )
         return {
             "id": note.id,
             "createdAt": note.created_at.strftime("%Y-%m-%d %H:%M:%S"),
             "status": note.status,
             "items": items,
         }
+
+
+@app.delete("/notes/{note_id}/items/{order_name}", tags=["notes"])
+async def remove_note_item(note_id: int, order_name: str, driver: str = Query(...)):
+    async for session in get_session():
+        note = await session.get(DeliveryNote, note_id)
+        if not note or note.driver_id != driver:
+            raise HTTPException(status_code=404, detail="Note not found")
+        if note.status != "draft":
+            raise HTTPException(status_code=400, detail="Cannot modify approved note")
+
+        order = await session.scalar(
+            select(Order).where(
+                Order.driver_id == driver, Order.order_name == order_name
+            )
+        )
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        item = await session.scalar(
+            select(DeliveryNoteItem).where(
+                DeliveryNoteItem.note_id == note_id,
+                DeliveryNoteItem.order_id == order.id,
+            )
+        )
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not in note")
+
+        await session.delete(item)
+        await session.commit()
+
+        await cache_delete("orders", driver)
+        await manager.broadcast(
+            {"type": "note_update", "driver": driver, "noteId": note_id}
+        )
+        return {"success": True}
 
 
 @app.post("/notes/{note_id}/approve", tags=["notes"])
@@ -723,7 +771,9 @@ async def approve_note(note_id: int, driver: str = Query(...)):
         if note.status != "draft":
             raise HTTPException(status_code=400, detail="Already approved")
         item_count = await session.scalar(
-            select(func.count(DeliveryNoteItem.id)).where(DeliveryNoteItem.note_id == note_id)
+            select(func.count(DeliveryNoteItem.id)).where(
+                DeliveryNoteItem.note_id == note_id
+            )
         )
         if item_count == 0:
             raise HTTPException(status_code=400, detail="Cannot approve empty note")
@@ -731,6 +781,9 @@ async def approve_note(note_id: int, driver: str = Query(...)):
         note.approved_at = dt.datetime.utcnow()
         await session.commit()
         await cache_delete("orders", driver)
+        await manager.broadcast(
+            {"type": "note_approved", "driver": driver, "noteId": note_id}
+        )
         return {"success": True}
 
 
@@ -950,7 +1003,9 @@ async def update_order_status(
             order.notes = payload.note
         if payload.driver_note is not None:
             ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-            order.driver_notes = ((order.driver_notes or "") + f"{ts} - {payload.driver_note}\n").lstrip()
+            order.driver_notes = (
+                (order.driver_notes or "") + f"{ts} - {payload.driver_note}\n"
+            ).lstrip()
         if payload.scheduled_time is not None:
             order.scheduled_time = payload.scheduled_time
         if payload.cash_amount is not None:
@@ -994,12 +1049,14 @@ async def update_order_status(
 
         await cache_delete("orders", driver)
         await cache_delete("payouts", driver)
-        await manager.broadcast({
-            "type": "status_update",
-            "driver": driver,
-            "order": payload.order_name,
-            "status": payload.new_status,
-        })
+        await manager.broadcast(
+            {
+                "type": "status_update",
+                "driver": driver,
+                "order": payload.order_name,
+                "status": payload.new_status,
+            }
+        )
         return {"success": True}
 
 
@@ -1083,11 +1140,15 @@ async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
 
 
 @app.put("/payout/{payout_id}", tags=["payouts"])
-async def update_payout(payout_id: str, payload: PayoutUpdate, driver: str = Query(...)):
+async def update_payout(
+    payout_id: str, payload: PayoutUpdate, driver: str = Query(...)
+):
     async for session in get_session():
         await get_driver(session, driver)
         payout = await session.scalar(
-            select(Payout).where(Payout.driver_id == driver, Payout.payout_id == payout_id)
+            select(Payout).where(
+                Payout.driver_id == driver, Payout.payout_id == payout_id
+            )
         )
         if not payout:
             raise HTTPException(status_code=404, detail="Payout not found")
@@ -1310,6 +1371,44 @@ async def admin_search(q: str = Query(...)):
                     }
                 )
         return results
+
+
+@app.get("/admin/notes", tags=["admin"])
+async def admin_list_notes(driver: str | None = Query(None)):
+    async for session in get_session():
+        q = select(DeliveryNote).order_by(DeliveryNote.created_at.desc())
+        if driver:
+            q = q.where(DeliveryNote.driver_id == driver)
+        result = await session.execute(q)
+        notes = []
+        for n in result.scalars():
+            item_rows = await session.execute(
+                select(DeliveryNoteItem).where(DeliveryNoteItem.note_id == n.id)
+            )
+            items = []
+            summary = {"delivered": 0, "cancelled": 0, "returned": 0}
+            for it in item_rows.scalars():
+                o = await session.get(Order, it.order_id)
+                if not o:
+                    continue
+                items.append({"orderName": o.order_name, "status": o.delivery_status})
+                if o.delivery_status == "Livré":
+                    summary["delivered"] += 1
+                elif o.delivery_status in ("Annulé", "Refusé"):
+                    summary["cancelled"] += 1
+                elif o.delivery_status == "Returned":
+                    summary["returned"] += 1
+            notes.append(
+                {
+                    "id": n.id,
+                    "driver": n.driver_id,
+                    "createdAt": n.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "status": n.status,
+                    "summary": summary,
+                    "items": items,
+                }
+            )
+        return notes
 
 
 # ---------------------------- EMPLOYEES -------------------------------
