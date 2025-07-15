@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 import json
+import asyncio
 import datetime as dt
 from typing import List, Optional
 from datetime import timezone
@@ -610,6 +611,22 @@ async def scan(
                         ],
                     )
                 )
+
+        # Try to supplement missing details from the Google Sheet when
+        # Shopify didn't return them
+        if not customer_name or not phone or not address:
+            try:
+                from .sheet_utils import get_order_from_sheet
+
+                sheet_data = await asyncio.to_thread(
+                    get_order_from_sheet, order_number
+                )
+            except Exception:
+                sheet_data = None
+            if sheet_data:
+                customer_name = customer_name or sheet_data.get("customer_name", "")
+                phone = phone or sheet_data.get("customer_phone", "")
+                address = address or sheet_data.get("address", "")
 
         now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         scan_day = dt.datetime.now().strftime("%Y-%m-%d")
