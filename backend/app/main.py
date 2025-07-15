@@ -1,7 +1,8 @@
 """
 delivery-app FastAPI backend
 ───────────────────────────
-✓ Barcode / manual scan stored in the database (+ Shopify lookup)
+✓ Barcode / manual scan stored in the database (orders looked up from Shopify)
+✓ Optionally falls back to Google Sheets when Shopify details are missing
 ✓ SQLAlchemy models for drivers, orders & payouts
 ✓ Driver-fee calculation + payout roll-up
 ✓ Order & payout queries for the mobile / web app
