@@ -72,6 +72,29 @@ class Payout(Base):
 
     driver = relationship("Driver")
 
+
+class DeliveryNote(Base):
+    __tablename__ = "delivery_notes"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    driver_id = Column(String, ForeignKey("drivers.id"), index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    status = Column(String, default="draft", index=True)
+    approved_at = Column(DateTime)
+
+    driver = relationship("Driver")
+    items = relationship("DeliveryNoteItem", back_populates="note")
+
+
+class DeliveryNoteItem(Base):
+    __tablename__ = "delivery_note_items"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    note_id = Column(Integer, ForeignKey("delivery_notes.id"), index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), index=True)
+    scanned_at = Column(DateTime, default=datetime.utcnow)
+
+    note = relationship("DeliveryNote", back_populates="items")
+    order = relationship("Order")
+
 class EmployeeLog(Base):
     __tablename__ = "employee_logs"
     id = Column(Integer, primary_key=True, autoincrement=True)

@@ -64,6 +64,7 @@
     .cash-input:focus{outline:none;border-color:#004aad}
     .fee-display{color:#4caf50;font-weight:bold;font-size:1.1rem}
     .fee-exchange{color:#ff9800}
+    .info-banner{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#004aad;color:white;padding:0.5rem 1rem;border-radius:8px;z-index:1000}
     .status-section{display:flex;gap:1rem;align-items:center;margin-top:1rem;flex-wrap:wrap}
     .status-select{padding:0.5rem 1rem;border:2px solid #ddd;border-radius:8px;font-size:1rem;background:white;cursor:pointer;transition:border-color 0.3s ease;min-width:150px}
     .status-select:focus{outline:none;border-color:#004aad}
@@ -165,6 +166,7 @@
 
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showTab('scanner')">📷 Scanner</button>
+    <button class="nav-tab" onclick="showTab('notes')">📑 Bon</button>
     <button class="nav-tab" onclick="showTab('orders')">📋 Orders</button>
     <button class="nav-tab" onclick="showTab('payouts')">💰 Payouts</button>
     <button class="nav-tab" onclick="showTab('stats')">📊 Stats</button>
@@ -183,7 +185,13 @@
                   border:2px solid #ddd;border-radius:12px;width:90%;max-width:400px;">
     <button class="scan-btn" onclick="manualAdd()">✏️ Add Order Manually</button>
   </div>
-  
+
+  <div id="notes-tab" class="tab-content">
+    <div id="notesContainer" class="orders-container">
+      <div class="loading">Loading notes...</div>
+    </div>
+  </div>
+
   <div id="orders-tab" class="tab-content">
     <!-- 📊 NEW – sticky doughnut chart -->
     <div id="ordersChartBox" style="margin:0.5rem auto;text-align:center;max-width:240px">
@@ -307,7 +315,7 @@
   /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
      ────────────────────────────────────────────────────────────*/
-  let scanner, orders = [], payouts = [];
+  let scanner, orders = [], payouts = [], notes = [];
   const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
   const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
 
@@ -474,6 +482,7 @@
     document.getElementById(`${t}-tab`).classList.add('active');
     if(t==='orders' && !orders.length)  loadOrders();
     if(t==='payouts' && !payouts.length) loadPayouts();
+    if(t==='notes'  && !notes.length)  loadNotes();
     if(t==='stats') applyDefaultRange();
   }
 
@@ -522,12 +531,19 @@
      5.  Scan result handlers  (now expect JSON object, not string)
      ────────────────────────────────────────────────────────────*/
   function handleScanResult(r){
-    const {result,order,tag,deliveryStatus} = r || {};
+    const {result,order,tag,deliveryStatus,noteId} = r || {};
     document.getElementById('result').innerHTML = `
       <div style="font-weight:600;margin-bottom:0.5rem;">${result||'Unknown'}</div>
       <div>Order: ${order||'N/A'}</div>
       ${tag?`<div>Tag: <span class="tag-badge tag-${tag}">${tag}</span></div>`:''}
       ${deliveryStatus?`<div>Status: ${deliveryStatus}</div>`:''}`;
+    if(noteId){
+      const b=document.createElement('div');
+      b.className='info-banner';
+      b.textContent=`Added to Bon de Livraison #${noteId} — remember to approve before departure.`;
+      document.body.prepend(b);
+      setTimeout(()=>b.remove(),3000);
+    }
   }
   function handleScanError(e){
     document.getElementById('result').innerHTML="❌ Scan failed: "+e;
@@ -746,6 +762,42 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
+     7b. Delivery Notes
+     ────────────────────────────────────────────────────────────*/
+  function loadNotes(){
+    document.getElementById('notesContainer').innerHTML='<div class="loading">Loading notes...</div>';
+    apiGet(`/notes?driver=${driver_id}`)
+      .then(displayNotes)
+      .catch(e=>document.getElementById('notesContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+  }
+
+  function displayNotes(nl){
+    notes = nl || [];
+    const c = document.getElementById('notesContainer');
+    if(!notes.length){ c.innerHTML='<div class="no-orders">📭 No open notes.</div>'; return; }
+    c.innerHTML = notes.map(n=>`<div class="order-card" onclick="openNote(${n.id})">
+        <div class="order-header"><div class="order-name">#${n.id}</div><div class="scan-date">${n.createdAt}</div></div>
+        <div>${n.parcels} colis – ${formatMoney(n.totalCod)} DH</div>
+      </div>`).join('');
+  }
+
+  function openNote(id){
+    apiGet(`/notes/${id}?driver=${driver_id}`).then(showNote);
+  }
+
+  function showNote(n){
+    const c=document.getElementById('notesContainer');
+    const items = n.items.map(i=>`<li>${i.orderName} – ${formatMoney(i.cashAmount)} DH</li>`).join('');
+    c.innerHTML = `<h3>Bon de Livraison #${n.id}</h3><ul>${items}</ul><button class="scan-btn" onclick="approveNote(${n.id})">✅ Approve & Send</button><button class="scan-btn" onclick="loadNotes()">⬅️ Back</button>`;
+  }
+
+  function approveNote(id){
+    apiPost(`/notes/${id}/approve?driver=${driver_id}`)
+      .then(()=>loadNotes())
+      .catch(e=>alert('❌ '+(e.detail||e)));
+  }
+
+  /* ─────────────────────────────────────────────────────────────
      Communication logging
      ────────────────────────────────────────────────────────────*/
   function getCommLog(order){
@@ -930,6 +982,9 @@
     loadStatsRange,
     applyDefaultRange,
     selectQuickRange,
+    loadNotes,
+    openNote,
+    approveNote,
     recordCall,
     recordWhatsapp
   });

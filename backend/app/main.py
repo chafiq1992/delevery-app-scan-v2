@@ -34,9 +34,18 @@ except Exception:  # pragma: no cover - redis optional
 
 from pydantic import BaseModel
 
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from .db import get_session, init_db, Driver, Order, Payout, EmployeeLog
+from .db import (
+    get_session,
+    init_db,
+    Driver,
+    Order,
+    Payout,
+    EmployeeLog,
+    DeliveryNote,
+    DeliveryNoteItem,
+)
 
 # ───────────────────────────────────────────────────────────────
 # CONFIGURATION  ––––– edit via env-vars in Render dashboard
@@ -90,6 +99,7 @@ class ScanResult(BaseModel):
     order: str
     tag: str = ""
     deliveryStatus: str = "Dispatched"
+    noteId: Optional[int] = None
 
 
 class StatusUpdate(BaseModel):
@@ -419,6 +429,21 @@ async def get_order_row(
     )
 
 
+async def get_open_delivery_note(
+    session: AsyncSession, driver_id: str
+) -> DeliveryNote:
+    note = await session.scalar(
+        select(DeliveryNote).where(
+            DeliveryNote.driver_id == driver_id, DeliveryNote.status == "draft"
+        )
+    )
+    if not note:
+        note = DeliveryNote(driver_id=driver_id, status="draft")
+        session.add(note)
+        await session.flush()
+    return note
+
+
 async def add_to_payout(
     session: AsyncSession,
     driver_id: str,
@@ -602,6 +627,16 @@ async def scan(
             follow_log="",
         )
         session.add(order)
+        await session.flush()
+
+        note = await get_open_delivery_note(session, driver)
+        session.add(
+            DeliveryNoteItem(
+                note_id=note.id,
+                order_id=order.id,
+                scanned_at=dt.datetime.utcnow(),
+            )
+        )
         await session.commit()
 
         await cache_delete("orders", driver)
@@ -616,7 +651,87 @@ async def scan(
             order=order_number,
             tag=get_primary_display_tag(tags),
             deliveryStatus="Dispatched",
+            noteId=note.id,
         )
+
+
+# -----------------------  DELIVERY NOTES  ------------------------
+
+@app.get("/notes", tags=["notes"])
+async def list_notes(driver: str = Query(...), history: bool = Query(False)):
+    async for session in get_session():
+        await get_driver(session, driver)
+        q = select(DeliveryNote).where(DeliveryNote.driver_id == driver)
+        q = (
+            q.where(DeliveryNote.status == "approved")
+            if history
+            else q.where(DeliveryNote.status == "draft")
+        )
+        q = q.order_by(DeliveryNote.created_at.desc())
+        result = await session.execute(q)
+        notes: list[dict] = []
+        for n in result.scalars():
+            item_rows = await session.execute(
+                select(DeliveryNoteItem).where(DeliveryNoteItem.note_id == n.id)
+            )
+            items = item_rows.scalars().all()
+            total_cash = 0.0
+            for it in items:
+                o = await session.get(Order, it.order_id)
+                if o:
+                    total_cash += o.cash_amount or 0
+            notes.append(
+                {
+                    "id": n.id,
+                    "createdAt": n.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "parcels": len(items),
+                    "totalCod": total_cash,
+                    "status": n.status,
+                }
+            )
+        return notes
+
+
+@app.get("/notes/{note_id}", tags=["notes"])
+async def get_note(note_id: int, driver: str = Query(...)):
+    async for session in get_session():
+        note = await session.get(DeliveryNote, note_id)
+        if not note or note.driver_id != driver:
+            raise HTTPException(status_code=404, detail="Note not found")
+        item_rows = await session.execute(
+            select(DeliveryNoteItem).where(DeliveryNoteItem.note_id == note_id)
+        )
+        items: list[dict] = []
+        for it in item_rows.scalars():
+            o = await session.get(Order, it.order_id)
+            if o:
+                items.append({"orderName": o.order_name, "cashAmount": o.cash_amount or 0})
+        return {
+            "id": note.id,
+            "createdAt": note.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "status": note.status,
+            "items": items,
+        }
+
+
+@app.post("/notes/{note_id}/approve", tags=["notes"])
+async def approve_note(note_id: int, driver: str = Query(...)):
+    async for session in get_session():
+        note = await session.get(DeliveryNote, note_id)
+        if not note or note.driver_id != driver:
+            raise HTTPException(status_code=404, detail="Note not found")
+        if note.status != "draft":
+            raise HTTPException(status_code=400, detail="Already approved")
+        item_count = await session.scalar(
+            select(func.count(DeliveryNoteItem.id)).where(DeliveryNoteItem.note_id == note_id)
+        )
+        if item_count == 0:
+            raise HTTPException(status_code=400, detail="Cannot approve empty note")
+        note.status = "approved"
+        note.approved_at = dt.datetime.utcnow()
+        await session.commit()
+        await cache_delete("orders", driver)
+        return {"success": True}
 
 
 # -----------------------------  ORDERS  -------------------------------
@@ -629,9 +744,13 @@ async def list_active_orders(driver: str = Query(...)):
     async for session in get_session():
         await get_driver(session, driver)
         result = await session.execute(
-            select(Order).where(
+            select(Order)
+            .outerjoin(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
+            .outerjoin(DeliveryNote, DeliveryNote.id == DeliveryNoteItem.note_id)
+            .where(
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
+                or_(DeliveryNote.status == "approved", DeliveryNote.id == None),
             )
         )
         rows = result.scalars().all()
@@ -695,9 +814,12 @@ async def list_archived_orders(driver: str = Query(...)):
         await get_driver(session, driver)
         result = await session.execute(
             select(Order)
+            .outerjoin(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
+            .outerjoin(DeliveryNote, DeliveryNote.id == DeliveryNoteItem.note_id)
             .where(
                 Order.driver_id == driver,
                 Order.delivery_status.in_(COMPLETED_STATUSES),
+                or_(DeliveryNote.status == "approved", DeliveryNote.id == None),
             )
             .order_by(Order.timestamp.desc())
         )
@@ -740,9 +862,13 @@ async def list_followup_orders(driver: str = Query(...)):
     async for session in get_session():
         await get_driver(session, driver)
         result = await session.execute(
-            select(Order).where(
+            select(Order)
+            .outerjoin(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
+            .outerjoin(DeliveryNote, DeliveryNote.id == DeliveryNoteItem.note_id)
+            .where(
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
+                or_(DeliveryNote.status == "approved", DeliveryNote.id == None),
             )
         )
         rows = result.scalars().all()
@@ -835,13 +961,19 @@ async def update_order_status(
             order.follow_log = payload.follow_log
 
         if payload.new_status == "Livré" and prev_status != "Livré":
-            driver_fee = calculate_driver_fee(order.tags)
-            cash_amt = payload.cash_amount or (order.cash_amount or 0)
-            payout_id = await add_to_payout(
-                session, driver, payload.order_name, cash_amt, driver_fee
+            note = await session.scalar(
+                select(DeliveryNote)
+                .join(DeliveryNoteItem)
+                .where(DeliveryNoteItem.order_id == order.id)
             )
-            order.payout_id = payout_id
-            order.driver_fee = driver_fee
+            if not note or note.status == "approved":
+                driver_fee = calculate_driver_fee(order.tags)
+                cash_amt = payload.cash_amount or (order.cash_amount or 0)
+                payout_id = await add_to_payout(
+                    session, driver, payload.order_name, cash_amt, driver_fee
+                )
+                order.payout_id = payout_id
+                order.driver_fee = driver_fee
         elif (
             payload.new_status
             and payload.new_status != "Livré"
