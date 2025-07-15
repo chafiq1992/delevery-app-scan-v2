@@ -256,6 +256,7 @@
       const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
       const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
       const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
+      const apiDelete = p => fetch(`${API}${p}`, {method:"DELETE"}).then(r => r.json());
 
       // 👇 Extract ?driver=driver1 from the URL (after login redirect)
       const urlParams = new URLSearchParams(window.location.search);
@@ -306,6 +307,9 @@
             loadOrders();
             loadPayouts();
           } else if(msg.type==='new_order' && msg.driver===driver_id){
+            loadOrders();
+          } else if((msg.type==='note_update' || msg.type==='note_approved') && msg.driver===driver_id){
+            loadNotes();
             loadOrders();
           }
         }catch(e){ console.error('ws',e); }
@@ -787,8 +791,17 @@
 
   function showNote(n){
     const c=document.getElementById('notesContainer');
-    const items = n.items.map(i=>`<li>${i.orderName} – ${formatMoney(i.cashAmount)} DH</li>`).join('');
+    const items = n.items.map(i=>{
+      const btn = n.status==='draft'?`<button onclick="removeItem(${n.id},'${i.orderName}')">❌</button>`:'';
+      return `<li>${i.orderName} – ${formatMoney(i.cashAmount)} DH ${btn}</li>`;
+    }).join('');
     c.innerHTML = `<h3>Bon de Livraison #${n.id}</h3><ul>${items}</ul><button class="scan-btn" onclick="approveNote(${n.id})">✅ Approve & Send</button><button class="scan-btn" onclick="loadNotes()">⬅️ Back</button>`;
+  }
+
+  function removeItem(noteId,order){
+    apiDelete(`/notes/${noteId}/items/${order}?driver=${driver_id}`)
+      .then(()=>openNote(noteId))
+      .catch(e=>alert('❌ '+(e.detail||e)));
   }
 
   function approveNote(id){
