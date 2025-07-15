@@ -12,5 +12,3 @@ SQLAlchemy[asyncio]==2.0.30
 redis[hiredis]==5.0.4
 fakeredis==2.21.0
 pytest==8.2.0
-gspread==6.1.0
-google-auth==2.29.0
