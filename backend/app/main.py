@@ -1,12 +1,12 @@
 """
 delivery-app FastAPI backend
 ───────────────────────────
-✓ Barcode / manual scan → Google Sheet (+ Shopify lookup)
-✓ Re-usable Google Sheet rows & data-validation
-✓ Driver-fee calculation + Payout roll-up
+✓ Barcode / manual scan stored in the database (+ Shopify lookup)
+✓ SQLAlchemy models for drivers, orders & payouts
+✓ Driver-fee calculation + payout roll-up
 ✓ Order & payout queries for the mobile / web app
 ✓ Status update incl. “Returned” handling
-✓ Daily archive of yesterday’s rows
+✓ Daily archive of yesterday’s orders
 
 Déployé sur Render via the Dockerfile you created earlier.
 """
