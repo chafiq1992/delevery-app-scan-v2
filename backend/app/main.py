@@ -55,7 +55,6 @@ from .db import (
     DeliveryNote,
     DeliveryNoteItem,
 )
-from .sheet_utils import get_order_from_sheet
 
 # ───────────────────────────────────────────────────────────────
 # CONFIGURATION  ––––– edit via env-vars in Render dashboard
@@ -618,6 +617,8 @@ async def scan(
         # Shopify didn't return them
         if not customer_name or not phone or not address:
             try:
+                from .sheet_utils import get_order_from_sheet
+
                 sheet_data = await asyncio.to_thread(
                     get_order_from_sheet, order_number
                 )
@@ -820,7 +821,7 @@ async def list_active_orders(driver: str = Query(...)):
             .where(
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
-                or_(DeliveryNote.status == "draft", DeliveryNote.id == None),
+                or_(DeliveryNote.status == "approved", DeliveryNote.id == None),
             )
         )
         rows = result.scalars().all()
