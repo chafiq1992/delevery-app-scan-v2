@@ -253,10 +253,45 @@
       const API      = window.location.origin.replace(/\/$/, "");
       const headers  = { "Content-Type": "application/json" };
 
-      const apiGet   = p        => fetch(`${API}${p}`).then(r => r.json());
-      const apiPost  = (p,b={}) => fetch(`${API}${p}`, {method:"POST",headers,body:JSON.stringify(b)}).then(r => r.json());
-      const apiPut   = (p,b={}) => fetch(`${API}${p}`,  {method:"PUT", headers,body:JSON.stringify(b)}).then(r => r.json());
-      const apiDelete = p => fetch(`${API}${p}`, {method:"DELETE"}).then(r => r.json());
+      const OFFLINE_KEY = 'pending_requests';
+      function loadQueue(){
+        try{ return JSON.parse(localStorage.getItem(OFFLINE_KEY)||'[]'); }catch{ return []; }
+      }
+      function saveQueue(q){ localStorage.setItem(OFFLINE_KEY, JSON.stringify(q)); }
+      async function flushQueue(){
+        const q = loadQueue();
+        if(!q.length || !navigator.onLine) return;
+        for(let i=0;i<q.length;i++){
+          const it=q[i];
+          try{
+            await fetch(`${API}${it.p}`, {method:it.m, headers, body: it.b ? JSON.stringify(it.b): undefined});
+            q.splice(i,1); i--; // remove processed item
+          }catch(e){
+            break; // stop if still failing
+          }
+        }
+        saveQueue(q);
+      }
+      window.addEventListener('online', flushQueue);
+
+      async function apiFetch(p,{method='GET',body=null}={}){
+        try{
+          const resp = await fetch(`${API}${p}`, {method, headers, body: body?JSON.stringify(body):undefined});
+          return await resp.json();
+        }catch(err){
+          if(method!=='GET'){
+            const q = loadQueue();
+            q.push({m:method,p, b:body});
+            saveQueue(q);
+          }
+          throw 'offline';
+        }
+      }
+
+      const apiGet   = p        => apiFetch(p);
+      const apiPost  = (p,b={}) => apiFetch(p,{method:'POST',body:b});
+      const apiPut   = (p,b={}) => apiFetch(p,{method:'PUT', body:b});
+      const apiDelete = p => apiFetch(p,{method:'DELETE'});
 
       // 👇 Extract ?driver=driver1 from the URL (after login redirect)
       const urlParams = new URLSearchParams(window.location.search);
@@ -296,6 +331,7 @@
       loadStatsHeader();
       applyDefaultRange();
       loadPayouts();
+      flushQueue();
 
       // Setup WebSocket for real-time updates
       const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -550,7 +586,9 @@
     }
   }
   function handleScanError(e){
-    document.getElementById('result').innerHTML="❌ Scan failed: "+e;
+    const msg = e==='offline' || !navigator.onLine ?
+      '✅ Saved offline. Will sync when online.' : '❌ Scan failed: '+e;
+    document.getElementById('result').innerHTML=msg;
     document.getElementById('againBtn').style.display="block";
   }
 
@@ -561,7 +599,10 @@
     document.getElementById('ordersContainer').innerHTML='<div class="loading">Loading orders...</div>';
     apiGet(`/orders?driver=${driver_id}`)
       .then(displayOrders)
-      .catch(e=>document.getElementById('ordersContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+      .catch(e=>{
+        const msg = e==='offline' ? 'Offline - queued for sync' : '❌ '+e;
+        document.getElementById('ordersContainer').innerHTML='<div class="no-orders">'+msg+'</div>';
+      });
   }
 
   function displayOrders(ol){
@@ -692,7 +733,7 @@
           loadPayouts();
         }
       })
-      .catch(e=>alert('Error updating status: '+e));
+      .catch(e=>alert(e==='offline'?'Saved offline. Will sync when online.':'Error updating status: '+e));
   }
 
   function addOrderNote(orderName){
@@ -703,21 +744,21 @@
     apiPut(`/order/status?driver=${driver_id}`,
            {order_name: orderName, driver_note: note})
       .then(()=>{})
-      .catch(e=>alert('Error updating notes: '+e));
+      .catch(e=>alert(e==='offline'?'Saved offline. Will sync when online.':'Error updating notes: '+e));
   }
 
   function updateCashAmount(orderName,amount){
     const cash = parseFloat(amount)||0;
     apiPut(`/order/status?driver=${driver_id}`,
            {order_name: orderName, cash_amount: cash})
-      .catch(e=>alert('Error updating cash amount: '+e));
+      .catch(e=>alert(e==='offline'?'Saved offline. Will sync when online.':'Error updating cash amount: '+e));
   }
 
   function updateScheduledTime(orderName,timeStr){
     apiPut(`/order/status?driver=${driver_id}`,
            {order_name: orderName, scheduled_time: timeStr})
       .then(()=>{})
-      .catch(e=>alert('Error updating schedule: '+e));
+      .catch(e=>alert(e==='offline'?'Saved offline. Will sync when online.':'Error updating schedule: '+e));
   }
 
   function showStatusAnimation(card,type,done){
@@ -772,7 +813,10 @@
     document.getElementById('notesContainer').innerHTML='<div class="loading">Loading notes...</div>';
     apiGet(`/notes?driver=${driver_id}`)
       .then(displayNotes)
-      .catch(e=>document.getElementById('notesContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+      .catch(e=>{
+        const msg = e==='offline' ? 'Offline - queued for sync' : '❌ '+e;
+        document.getElementById('notesContainer').innerHTML='<div class="no-orders">'+msg+'</div>';
+      });
   }
 
   function displayNotes(nl){
@@ -850,7 +894,10 @@
     document.getElementById('payoutsContainer').innerHTML='<div class="loading">Loading payouts...</div>';
     apiGet(`/payouts?driver=${driver_id}`)
       .then(displayPayouts)
-      .catch(e=>document.getElementById('payoutsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+      .catch(e=>{
+        const msg = e==='offline' ? 'Offline - queued for sync' : '❌ '+e;
+        document.getElementById('payoutsContainer').innerHTML='<div class="no-orders">'+msg+'</div>';
+      });
   }
 
   function displayPayouts(pl){
@@ -910,11 +957,11 @@
   function markPayoutPaid(payoutId){
     const url = `/payout/mark-paid/${encodeURIComponent(payoutId)}?driver=${driver_id}`;
      apiPost(url)
-       .then(() => {
-         alert('✅ Payout marked as paid');
-         loadPayouts();          // refresh the list
-       })
-      .catch(e => alert('Error marking payout: ' + e));
+      .then(() => {
+        alert('✅ Payout marked as paid');
+        loadPayouts();          // refresh the list
+      })
+      .catch(e => alert(e==='offline'?'Saved offline. Will sync when online.':'Error marking payout: ' + e));
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -925,7 +972,10 @@
     document.getElementById('statsContainer').innerHTML='<div class="loading">Loading stats...</div>';
     apiGet(`/stats?driver=${driver_id}&days=${days}`)
       .then(displayStats)
-      .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+      .catch(e=>{
+        const msg = e==='offline' ? 'Offline - queued for sync' : '❌ '+e;
+        document.getElementById('statsContainer').innerHTML='<div class="no-orders">'+msg+'</div>';
+      });
   }
 
   function loadStatsRange(){
@@ -935,7 +985,10 @@
     document.getElementById('statsContainer').innerHTML='<div class="loading">Loading stats...</div>';
     apiGet(`/stats?driver=${driver_id}&start=${start}&end=${end}`)
       .then(displayStats)
-      .catch(e=>document.getElementById('statsContainer').innerHTML='<div class="no-orders">❌ '+e+'</div>');
+      .catch(e=>{
+        const msg = e==='offline' ? 'Offline - queued for sync' : '❌ '+e;
+        document.getElementById('statsContainer').innerHTML='<div class="no-orders">'+msg+'</div>';
+      });
   }
 
   async function displayStats(st){
