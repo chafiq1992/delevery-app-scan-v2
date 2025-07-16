@@ -46,3 +46,19 @@ def test_lookup_strips_hash(monkeypatch):
 
     res2 = sheet_utils.get_order_from_sheet("#5678")
     assert res2["customer_name"] == "Bob"
+
+
+def test_b64_credentials(monkeypatch):
+    rows = [["Order Number", "Customer Name"], ["1", "Alice"]]
+    sys.modules['gspread'] = make_gspread_stub(rows)
+    import importlib
+    import app.sheet_utils as sheet_utils
+    importlib.reload(sheet_utils)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    import base64
+    creds = base64.b64encode(b"{}" ).decode()
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_B64", creds)
+    monkeypatch.setenv("SHEET_ID", "dummy")
+
+    res = sheet_utils.get_order_from_sheet("1")
+    assert res == {"customer_name": "Alice", "customer_phone": "", "address": ""}
