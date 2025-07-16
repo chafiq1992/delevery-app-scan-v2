@@ -1,32 +1,11 @@
 import os
 import gspread
-import base64
-import tempfile
-from typing import Optional, Dict, Tuple
-
-
-def _resolve_credentials() -> Tuple[Optional[str], Optional[str]]:
-    """Return path to credentials file and a temporary file to clean up."""
-    creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if creds:
-        return creds, None
-    b64 = os.getenv("GOOGLE_CREDENTIALS_B64")
-    if not b64:
-        return None, None
-    try:
-        data = base64.b64decode(b64)
-    except Exception:
-        return None, None
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-    tmp.write(data)
-    tmp.flush()
-    tmp.close()
-    return tmp.name, tmp.name
+from typing import Optional, Dict
 
 
 def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
     """Lookup order details in the Google Sheet."""
-    creds, tmp = _resolve_credentials()
+    creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     sheet_id = os.getenv("SHEET_ID")
     if not creds or not sheet_id:
         return None
@@ -37,12 +16,6 @@ def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
         rows = ws.get_all_values()
     except Exception:
         return None
-    finally:
-        if tmp:
-            try:
-                os.unlink(tmp)
-            except Exception:
-                pass
     if not rows:
         return None
     header = [h.strip().lower() for h in rows[0]]

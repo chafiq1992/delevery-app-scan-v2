@@ -113,10 +113,8 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-        codex/update-sheet_utils.py-for-credentials-handling
-        if not engine.url.drivername.startswith("sqlite"):
-            # Ensure new columns exist when upgrading without migrations
-
+        # Ensure new columns exist when upgrading without migrations (Postgres only)
+        if engine.dialect.name != "sqlite":
             result = await conn.execute(
                 text(
                     "SELECT column_name FROM information_schema.columns "
