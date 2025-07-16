@@ -34,10 +34,12 @@ def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
     address_idx = find_idx(["address", "customeraddress"])
     if order_idx is None:
         return None
+    query_clean = order_name.lstrip("#").strip()
     for row in rows[1:]:
         if len(row) <= order_idx:
             continue
-        if row[order_idx].strip() == order_name:
+        row_value = row[order_idx].lstrip("#").strip()
+        if row_value == query_clean:
             def get_cell(idx):
                 return row[idx].strip() if idx is not None and idx < len(row) else ""
             return {
