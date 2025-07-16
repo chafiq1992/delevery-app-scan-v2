@@ -1,20 +1,47 @@
 # Delivery App Backend
 
-This project provides a FastAPI backend for the delivery app. Orders are retrieved from Shopify and optionally supplemented with data from a Google Sheet.
+This repository contains a FastAPI service used to scan delivery orders and
+store them in a database. Shopify is queried first and a Google Sheet can be
+used as a fallback when order details are incomplete.
 
-## Google Sheets Fallback
+## Environment variables
 
-When scanning an order, the backend queries Shopify first. If Shopify does not return complete information for the order, the application can look up missing fields from a Google Sheet. The fallback is only used when the following environment variables are provided:
+The backend is configured entirely through environment variables:
 
-- `GOOGLE_APPLICATION_CREDENTIALS` – path to the service account JSON credentials file with access to the sheet.
-- `SHEET_ID` – ID of the Google Sheet that contains order data (the first worksheet is used).
+- `DATABASE_URL` – SQLAlchemy connection string for the database.
+- `IRRAKIDS_API_KEY` / `IRRAKIDS_PASSWORD` – Shopify credentials for the
+  *irrakids* store.
+- `IRRANOVA_API_KEY` / `IRRANOVA_PASSWORD` – Shopify credentials for the
+  *irranova* store.
+- `ADMIN_PASSWORD` – password for the admin interface (defaults to
+  `admin123`).
+- `REDIS_URL` – optional Redis instance used for caching.
+- `SHEET_ID` – ID of the Google Sheet providing fallback order data.
+- `GOOGLE_APPLICATION_CREDENTIALS` – path to the service account JSON file.
+- `GOOGLE_CREDENTIALS_B64` – base64 encoded credentials; decode this value and
+  write it to a file if you cannot mount one.
 
-If either variable is not set, the Google Sheets lookup is skipped and only Shopify data is used.
+Either `GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_CREDENTIALS_B64` must be
+provided for the Google Sheets fallback to work. If neither is set, Shopify data
+is used on its own.
+
+## Running the tests
+
+Install the requirements from `backend/requirements.txt` and run:
 
 ```bash
-# Example environment setup
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/creds.json
-export SHEET_ID=your-sheet-id
+cd backend
+pytest
 ```
 
-The sheet is expected to have columns for order number, customer name, phone and address. `sheet_utils.get_order_from_sheet` handles flexible column names and returns the first matching row for the order.
+## Starting the application
+
+For local development the app can be started with `uvicorn`:
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+
+The Dockerfile provided in `backend/` runs the same app using Gunicorn when
+deployed.
