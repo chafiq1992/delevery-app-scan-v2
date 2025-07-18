@@ -3,11 +3,19 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 import asyncio
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+import importlib
+
+if os.path.exists("test.db"):
+    os.remove("test.db")
 
 # Ensure an in-memory database for tests
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
 
 from app import main as app_main
+importlib.reload(app_main)
 
 class DummyResponse:
     def __init__(self, payload):

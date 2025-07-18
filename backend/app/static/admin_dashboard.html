@@ -118,6 +118,7 @@
       <button onclick="changeVerifyDate(1)" class="px-2">▶</button>
       <input id="verifySearch" placeholder="Search..." class="flex-grow border p-1 rounded" />
       <button onclick="loadVerify()" class="bg-blue-600 text-white px-3 py-1 rounded">Apply</button>
+      <button onclick="syncVerify()" class="bg-green-600 text-white px-3 py-1 rounded">Sync Sheet</button>
     </div>
     <div class="overflow-auto max-h-[500px] bg-white rounded shadow">
       <table id="verifyTable" class="min-w-max w-full text-sm">
@@ -445,6 +446,12 @@ async function loadVerify(){
     if(r.verified)verified++;
   });
   document.getElementById('verifyFooter').textContent=`Total ${data.total} – Verified ${verified} – Missing ${data.missing}`;
+}
+
+async function syncVerify(){
+  const date=document.getElementById('verifyDate').value;
+  await fetch(`/admin/verify/sync?date=${date}`,{method:'POST'});
+  loadVerify();
 }
 document.getElementById('verifyBody').addEventListener('dblclick',async e=>{
   const td=e.target.closest('td[data-field]');if(!td)return;const id=td.parentNode.dataset.id;
