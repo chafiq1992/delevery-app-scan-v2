@@ -1,16 +1,43 @@
 import os
+import json
+import base64
+import tempfile
 import gspread
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
+
+
+def _get_gspread_client() -> Optional[Any]:
+    """Return a gspread client using either base64 credentials or a file."""
+    creds_b64 = os.getenv("GOOGLE_CREDENTIALS_B64")
+    creds_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if creds_b64:
+        try:
+            decoded = base64.b64decode(creds_b64).decode()
+            info = json.loads(decoded)
+            try:
+                return gspread.service_account_from_dict(info)
+            except Exception:
+                with tempfile.NamedTemporaryFile(delete=False, mode="w") as tmp:
+                    tmp.write(decoded)
+                    tmp.flush()
+                    return gspread.service_account(filename=tmp.name)
+        except Exception:
+            return None
+    if creds_file:
+        try:
+            return gspread.service_account(filename=creds_file)
+        except Exception:
+            return None
+    return None
 
 
 def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
     """Lookup order details in the Google Sheet."""
-    creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     sheet_id = os.getenv("SHEET_ID")
-    if not creds or not sheet_id:
+    gc = _get_gspread_client()
+    if not gc or not sheet_id:
         return None
     try:
-        gc = gspread.service_account(filename=creds)
         sh = gc.open_by_key(sheet_id)
         ws = sh.sheet1
         rows = ws.get_all_values()
@@ -52,12 +79,11 @@ def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
 
 def load_sheet_orders() -> List[Dict[str, str]]:
     """Return all orders from the verification Google Sheet."""
-    creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     sheet_id = os.getenv("VERIFICATION_SHEET_ID") or os.getenv("SHEET_ID")
-    if not creds or not sheet_id:
+    gc = _get_gspread_client()
+    if not gc or not sheet_id:
         return []
     try:
-        gc = gspread.service_account(filename=creds)
         sh = gc.open_by_key(sheet_id)
         ws = sh.sheet1
         rows = ws.get_all_values()
