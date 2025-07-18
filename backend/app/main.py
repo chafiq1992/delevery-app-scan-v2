@@ -35,6 +35,7 @@ from fastapi import Form
 from cachetools import TTLCache
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from .sheet_utils import load_sheet_orders, get_order_from_sheet
 
 try:
     import redis.asyncio as redis  # type: ignore
@@ -54,6 +55,7 @@ from .db import (
     EmployeeLog,
     DeliveryNote,
     DeliveryNoteItem,
+    VerificationOrder,
 )
 
 # ───────────────────────────────────────────────────────────────
@@ -130,6 +132,11 @@ class EmployeeLog(BaseModel):
     employee: str
     order: Optional[str] = None
     amount: Optional[float] = None
+
+
+class VerificationUpdate(BaseModel):
+    driver_id: Optional[str] = None
+    scan_time: Optional[str] = None  # YYYY-MM-DD HH:MM:SS
 
 
 class PayoutUpdate(BaseModel):
@@ -243,6 +250,53 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+async def sync_verification_orders(date_str: str, session: AsyncSession) -> None:
+    """Import new orders from the Google Sheet for the given date."""
+    rows = await asyncio.to_thread(load_sheet_orders)
+    if not rows:
+        return
+    for row in rows:
+        if row.get("order_date") != date_str:
+            continue
+        existing = await session.scalar(
+            select(VerificationOrder).where(
+                VerificationOrder.order_date == date_str,
+                VerificationOrder.order_name == row["order_name"],
+            )
+        )
+        if existing:
+            # If driver not yet set, try to fetch from scans
+            if not existing.driver_id:
+                scanned = await session.scalar(
+                    select(Order)
+                    .where(Order.order_name == row["order_name"])
+                    .order_by(Order.timestamp.desc())
+                )
+                if scanned:
+                    existing.driver_id = scanned.driver_id
+                    existing.scan_time = scanned.timestamp
+            continue
+
+        scanned = await session.scalar(
+            select(Order)
+            .where(Order.order_name == row["order_name"])
+            .order_by(Order.timestamp.desc())
+        )
+        vo = VerificationOrder(
+            order_date=date_str,
+            order_name=row["order_name"],
+            customer_name=row.get("customer_name", ""),
+            customer_phone=row.get("customer_phone", ""),
+            address=row.get("address", ""),
+            cod_total=row.get("cod_total", ""),
+            city=row.get("city", ""),
+            driver_id=scanned.driver_id if scanned else None,
+            scan_time=scanned.timestamp if scanned else None,
+        )
+        session.add(vo)
+    await session.commit()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1389,6 +1443,60 @@ async def admin_search(q: str = Query(...)):
                     }
                 )
         return results
+
+
+@app.get("/admin/verify", tags=["admin"])
+async def admin_verify(date: str = Query(...), q: str | None = Query(None)):
+    async for session in get_session():
+        await sync_verification_orders(date, session)
+        q_filter = []
+        if q:
+            q_lower = f"%{q.lower()}%"
+            q_filter.append(
+                or_(
+                    VerificationOrder.order_name.ilike(q_lower),
+                    VerificationOrder.customer_name.ilike(q_lower),
+                )
+            )
+        result = await session.execute(
+            select(VerificationOrder)
+            .where(VerificationOrder.order_date == date, *q_filter)
+            .order_by(VerificationOrder.order_name)
+        )
+        rows = []
+        for v in result.scalars():
+            rows.append(
+                {
+                    "id": v.id,
+                    "orderName": v.order_name,
+                    "customerName": v.customer_name,
+                    "customerPhone": v.customer_phone,
+                    "address": v.address,
+                    "codTotal": v.cod_total,
+                    "city": v.city,
+                    "driver": v.driver_id or "",
+                    "scanTime": v.scan_time.strftime("%Y-%m-%d %H:%M:%S") if v.scan_time else "",
+                    "verified": bool(v.driver_id and v.scan_time),
+                }
+            )
+        total = len(rows)
+        verified = sum(1 for r in rows if r["verified"])
+        missing = total - verified
+        return {"rows": rows, "total": total, "verified": verified, "missing": missing}
+
+
+@app.put("/admin/verify/{item_id}", tags=["admin"])
+async def admin_verify_update(item_id: int, payload: VerificationUpdate):
+    async for session in get_session():
+        item = await session.get(VerificationOrder, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Not found")
+        if payload.driver_id is not None:
+            item.driver_id = payload.driver_id or None
+        if payload.scan_time is not None:
+            item.scan_time = parse_timestamp(payload.scan_time) if payload.scan_time else None
+        await session.commit()
+        return {"success": True}
 
 
 @app.get("/admin/notes", tags=["admin"])

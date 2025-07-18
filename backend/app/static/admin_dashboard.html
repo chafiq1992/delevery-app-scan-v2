@@ -25,6 +25,7 @@
   <div class="flex space-x-2 bg-gray-100 p-2 sticky top-0 z-10 overflow-x-auto">
     <div class="tab active" data-tab="overview" onclick="activateTab('overview')">Statistics Overview</div>
     <div class="tab" data-tab="orders" onclick="activateTab('orders');loadOrdersTab()">Orders</div>
+    <div class="tab" data-tab="verify" onclick="activateTab('verify');loadVerifyTab()">Order Verification</div>
     <div class="tab" data-tab="parcels" onclick="activateTab('parcels');loadParcelsTab()">Parcels DB</div>
     <div class="tab" data-tab="payouts" onclick="activateTab('payouts');loadPayoutsTab()">Payouts DB</div>
     <div class="tab" data-tab="placeholder" onclick="activateTab('placeholder')">Other</div>
@@ -107,6 +108,40 @@
     </div>
     <h3 class="text-lg font-semibold mt-4">Delivery Notes</h3>
     <div id="adminNotes" class="space-y-2"></div>
+  </div>
+
+  <!-- Order Verification tab -->
+  <div id="verify" class="tab-content">
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      <button onclick="changeVerifyDate(-1)" class="px-2">◀</button>
+      <input type="date" id="verifyDate" class="border p-1 rounded" />
+      <button onclick="changeVerifyDate(1)" class="px-2">▶</button>
+      <input id="verifySearch" placeholder="Search..." class="flex-grow border p-1 rounded" />
+      <button onclick="loadVerify()" class="bg-blue-600 text-white px-3 py-1 rounded">Apply</button>
+    </div>
+    <div class="overflow-auto max-h-[500px] bg-white rounded shadow">
+      <table id="verifyTable" class="min-w-max w-full text-sm">
+        <thead class="sticky top-0 bg-gray-100">
+          <tr>
+            <th class="p-2 text-left">Order #</th>
+            <th class="p-2 text-left">Customer</th>
+            <th class="p-2 text-left">Phone</th>
+            <th class="p-2 text-left">Address</th>
+            <th class="p-2 text-left">COD/Total</th>
+            <th class="p-2 text-left">City</th>
+            <th class="p-2 text-left">Driver</th>
+            <th class="p-2 text-left">Scan Time</th>
+            <th class="p-2 text-left">Status</th>
+          </tr>
+        </thead>
+        <tbody id="verifyBody"></tbody>
+        <tfoot>
+          <tr class="bg-gray-100">
+            <td colspan="9" class="p-2 text-right" id="verifyFooter"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   </div>
 
   <!-- Parcels database tab -->
@@ -380,6 +415,48 @@ document.getElementById('payoutsBody').addEventListener('dblclick',async e=>{
   if(!td)return;const field=td.dataset.field;const id=td.parentNode.dataset.id;const val=prompt(`Edit ${field}`,td.textContent);if(val===null)return;td.textContent=val;const driver=document.getElementById('payoutsDriver').value;let payload={};
   if(field==='totalCash')payload.total_cash=parseFloat(val)||0;else if(field==='totalFees')payload.total_fees=parseFloat(val)||0;else if(field==='totalPayout')payload.total_payout=parseFloat(val)||0;else if(field==='orders')payload.orders=val;else if(field==='dateCreated')payload.date_created=val;await fetch(`/payout/${id}?driver=${driver}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 });
+
+// ----------------------- ORDER VERIFICATION --------------------
+function loadVerifyTab(){
+  const d=document.getElementById('verifyDate');
+  if(!d.value)d.value=formatDate(new Date());
+  loadVerify();
+}
+function changeVerifyDate(off){
+  const d=document.getElementById('verifyDate');
+  const dt=new Date(d.value);dt.setDate(dt.getDate()+off);d.value=formatDate(dt);
+  loadVerify();
+}
+async function loadVerify(){
+  const date=document.getElementById('verifyDate').value;
+  const q=document.getElementById('verifySearch').value.trim();
+  let url=`/admin/verify?date=${date}`;
+  if(q)url+=`&q=${encodeURIComponent(q)}`;
+  const data=await fetch(url).then(r=>r.json()).catch(()=>({rows:[]}));
+  const body=document.getElementById('verifyBody');
+  body.innerHTML='';
+  let verified=0;
+  data.rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.dataset.id=r.id;
+    if(!r.verified)tr.classList.add('bg-yellow-100');
+    tr.innerHTML=`<td class="p-2">${r.orderName}</td><td class="p-2">${r.customerName}</td><td class="p-2">${r.customerPhone}</td><td class="p-2">${r.address}</td><td class="p-2">${r.codTotal}</td><td class="p-2">${r.city}</td><td class="p-2" data-field="driver">${r.driver}</td><td class="p-2" data-field="scan">${r.scanTime}</td><td class="p-2">${r.verified?'✔':'⚠'}</td>`;
+    body.appendChild(tr);
+    if(r.verified)verified++;
+  });
+  document.getElementById('verifyFooter').textContent=`Total ${data.total} – Verified ${verified} – Missing ${data.missing}`;
+}
+document.getElementById('verifyBody').addEventListener('dblclick',async e=>{
+  const td=e.target.closest('td[data-field]');if(!td)return;const id=td.parentNode.dataset.id;
+  if(td.dataset.field==='driver'){
+    const val=prompt('Driver',td.textContent);if(val===null)return;td.textContent=val;
+    await fetch(`/admin/verify/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({driver_id:val})});
+  }else if(td.dataset.field==='scan'){
+    const val=prompt('Scan Time',td.textContent);if(val===null)return;td.textContent=val;
+    await fetch(`/admin/verify/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({scan_time:val})});
+  }
+  loadVerify();
+});
 document.addEventListener('DOMContentLoaded',()=>{
   const {start,end}=computeDefaultDates();
   document.getElementById('startDate').value=start;
@@ -391,6 +468,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const wsProtocol=location.protocol==='https:'?'wss':'ws';
   const ws=new WebSocket(`${wsProtocol}://${location.host}/ws`);
   ws.onmessage=evt=>{try{const m=JSON.parse(evt.data);if((m.type==='note_update'||m.type==='note_approved')&&m.driver===currentDriver){loadAdminNotes();}}catch(e){}};
+  loadVerifyTab();
 });
 </script>
 </body>

@@ -103,6 +103,25 @@ class EmployeeLog(Base):
     order = Column(String, index=True)
     amount = Column(Float)
 
+
+class VerificationOrder(Base):
+    """Orders imported from the Google Sheet for admin verification."""
+
+    __tablename__ = "verification_orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_date = Column(String, index=True)
+    order_name = Column(String, index=True)
+    customer_name = Column(String)
+    customer_phone = Column(String)
+    address = Column(Text)
+    cod_total = Column(String)
+    city = Column(String)
+    driver_id = Column(String, ForeignKey("drivers.id"))
+    scan_time = Column(DateTime)
+
+    driver = relationship("Driver")
+
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
@@ -113,24 +132,25 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-        # Ensure new columns exist when upgrading without migrations
-        result = await conn.execute(
-            text(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='orders' AND column_name='follow_log'"
+        if not engine.url.drivername.startswith("sqlite"):
+            # Ensure new columns exist when upgrading without migrations
+            result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='orders' AND column_name='follow_log'"
+                )
             )
-        )
-        if not result.first():
-            await conn.execute(text("ALTER TABLE orders ADD COLUMN follow_log TEXT"))
+            if not result.first():
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN follow_log TEXT"))
 
-        result = await conn.execute(
-            text(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name='orders' AND column_name='driver_notes'"
+            result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='orders' AND column_name='driver_notes'"
+                )
             )
-        )
-        if not result.first():
-            await conn.execute(text("ALTER TABLE orders ADD COLUMN driver_notes TEXT"))
+            if not result.first():
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN driver_notes TEXT"))
 
     default_drivers = ["abderrehman", "anouar", "mohammed", "nizar"]
     async with AsyncSessionLocal() as session:

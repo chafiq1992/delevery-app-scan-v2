@@ -2,13 +2,12 @@ import os
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+import asyncio
 
 # Ensure an in-memory database for tests
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
 
 from app import main as app_main
-
-client = TestClient(app_main.app)
 
 class DummyResponse:
     def __init__(self, payload):
@@ -33,6 +32,8 @@ def fake_sheet(order_name: str):
 def test_scan_uses_sheet_when_shopify_incomplete(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     monkeypatch.setattr(app_main, "get_order_from_sheet", fake_sheet)
+    client = TestClient(app_main.app)
+    asyncio.run(app_main.init_db())
 
     resp = client.post("/scan?driver=abderrehman", json={"barcode": "#1111"})
     assert resp.status_code == 200
