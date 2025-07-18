@@ -1,6 +1,6 @@
 import os
 import gspread
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 
 def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
@@ -48,3 +48,52 @@ def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
                 "address": get_cell(address_idx),
             }
     return None
+
+
+def load_sheet_orders() -> List[Dict[str, str]]:
+    """Return all orders from the verification Google Sheet."""
+    creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    sheet_id = os.getenv("VERIFICATION_SHEET_ID") or os.getenv("SHEET_ID")
+    if not creds or not sheet_id:
+        return []
+    try:
+        gc = gspread.service_account(filename=creds)
+        sh = gc.open_by_key(sheet_id)
+        ws = sh.sheet1
+        rows = ws.get_all_values()
+    except Exception:
+        return []
+    if not rows:
+        return []
+    header = [h.strip().lower() for h in rows[0]]
+    def idx(name:str):
+        for i,h in enumerate(header):
+            if name in h.replace(" ",""):
+                return i
+        return None
+    indices = {
+        "date": idx("date"),
+        "order": idx("order"),
+        "name": idx("customer"),
+        "phone": idx("phone"),
+        "address": idx("address"),
+        "city": idx("city"),
+        "cod": idx("cod"),
+    }
+    orders = []
+    for row in rows[1:]:
+        order = {}
+        if indices["order"] is None or len(row) <= indices["order"]:
+            continue
+        order["order_name"] = row[indices["order"]].strip()
+        if indices["date"] is not None and len(row) > indices["date"]:
+            order["order_date"] = row[indices["date"]].strip()
+        else:
+            order["order_date"] = ""
+        order["customer_name"] = row[indices["name"]].strip() if indices["name"] is not None and len(row)>indices["name"] else ""
+        order["customer_phone"] = row[indices["phone"]].strip() if indices["phone"] is not None and len(row)>indices["phone"] else ""
+        order["address"] = row[indices["address"]].strip() if indices["address"] is not None and len(row)>indices["address"] else ""
+        order["city"] = row[indices["city"]].strip() if indices["city"] is not None and len(row)>indices["city"] else ""
+        order["cod_total"] = row[indices["cod"]].strip() if indices["cod"] is not None and len(row)>indices["cod"] else ""
+        orders.append(order)
+    return orders
