@@ -12,7 +12,10 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
 import os
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -129,8 +132,11 @@ async def get_session() -> AsyncSession:
 
 async def init_db() -> None:
     """Create tables and ensure default drivers exist."""
+    logger.info("Initializing database")
     async with engine.begin() as conn:
+        logger.info("Creating tables if not exist")
         await conn.run_sync(Base.metadata.create_all)
+        logger.info("Tables created")
 
         if not engine.url.drivername.startswith("sqlite"):
             # Ensure new columns exist when upgrading without migrations
@@ -156,5 +162,7 @@ async def init_db() -> None:
     async with AsyncSessionLocal() as session:
         for d_id in default_drivers:
             if not await session.get(Driver, d_id):
+                logger.info("Inserting default driver %s", d_id)
                 session.add(Driver(id=d_id))
         await session.commit()
+    logger.info("Database initialization complete")
