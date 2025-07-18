@@ -1499,6 +1499,14 @@ async def admin_verify_update(item_id: int, payload: VerificationUpdate):
         return {"success": True}
 
 
+@app.post("/admin/verify/sync", tags=["admin"])
+async def admin_verify_sync(date: str = Query(...)):
+    """Manually import verification orders from the Google Sheet."""
+    async for session in get_session():
+        await sync_verification_orders(date, session)
+        return {"success": True}
+
+
 @app.get("/admin/notes", tags=["admin"])
 async def admin_list_notes(driver: str | None = Query(None)):
     async for session in get_session():
