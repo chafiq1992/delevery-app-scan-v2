@@ -4,6 +4,9 @@ import base64
 import tempfile
 import gspread
 from typing import Optional, Dict, List, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_gspread_client() -> Optional[Any]:
@@ -36,13 +39,16 @@ def get_order_from_sheet(order_name: str) -> Optional[Dict[str, str]]:
     sheet_id = os.getenv("SHEET_ID")
     gc = _get_gspread_client()
     if not gc or not sheet_id:
+        logger.warning("Missing Google credentials or sheet ID")
         return None
     try:
         sh = gc.open_by_key(sheet_id)
         ws = sh.sheet1
         rows = ws.get_all_values()
-    except Exception:
+    except Exception as e:
+        logger.exception("Error reading Google Sheet: %s", e)
         return None
+    logger.info("Fetched %d rows from sheet", len(rows))
     if not rows:
         return None
     header = [h.strip().lower() for h in rows[0]]
@@ -82,13 +88,16 @@ def load_sheet_orders() -> List[Dict[str, str]]:
     sheet_id = os.getenv("VERIFICATION_SHEET_ID") or os.getenv("SHEET_ID")
     gc = _get_gspread_client()
     if not gc or not sheet_id:
+        logger.warning("Missing Google credentials or sheet ID")
         return []
     try:
         sh = gc.open_by_key(sheet_id)
         ws = sh.sheet1
         rows = ws.get_all_values()
-    except Exception:
+    except Exception as e:
+        logger.exception("Error reading Google Sheet: %s", e)
         return []
+    logger.info("Fetched %d rows from sheet", len(rows))
     if not rows:
         return []
     header = [h.strip().lower() for h in rows[0]]

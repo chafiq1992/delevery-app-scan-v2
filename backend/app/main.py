@@ -18,6 +18,10 @@ load_dotenv()
 import os
 import json
 import asyncio
+import logging
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 import datetime as dt
 from typing import List, Optional
 from datetime import timezone
@@ -255,8 +259,10 @@ manager = ConnectionManager()
 async def sync_verification_orders(date_str: str, session: AsyncSession) -> None:
     """Import new orders from the Google Sheet for the given date."""
     rows = await asyncio.to_thread(load_sheet_orders)
+    logger.info("Loaded %d rows from sheet", len(rows))
     if not rows:
         return
+    created = 0
     for row in rows:
         if row.get("order_date") != date_str:
             continue
@@ -277,6 +283,9 @@ async def sync_verification_orders(date_str: str, session: AsyncSession) -> None
                 if scanned:
                     existing.driver_id = scanned.driver_id
                     existing.scan_time = scanned.timestamp
+                    logger.info(
+                        "Matched %s to driver %s", row["order_name"], scanned.driver_id
+                    )
             continue
 
         scanned = await session.scalar(
@@ -296,7 +305,15 @@ async def sync_verification_orders(date_str: str, session: AsyncSession) -> None
             scan_time=scanned.timestamp if scanned else None,
         )
         session.add(vo)
+        created += 1
+        if scanned:
+            logger.info(
+                "Matched %s to driver %s", row["order_name"], scanned.driver_id
+            )
+        logger.info("Created verification order for %s", row["order_name"])
     await session.commit()
+    if created:
+        logger.info("Imported %d verification rows", created)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -671,8 +688,6 @@ async def scan(
         # Shopify didn't return them
         if not customer_name or not phone or not address:
             try:
-                from .sheet_utils import get_order_from_sheet
-
                 sheet_data = await asyncio.to_thread(
                     get_order_from_sheet, order_number
                 )
@@ -875,7 +890,10 @@ async def list_active_orders(driver: str = Query(...)):
             .where(
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
-                or_(DeliveryNote.status == "approved", DeliveryNote.id == None),
+                or_(
+                    DeliveryNote.status.in_(["draft", "approved"]),
+                    DeliveryNote.id == None,
+                ),
             )
         )
         rows = result.scalars().all()
@@ -944,7 +962,10 @@ async def list_archived_orders(driver: str = Query(...)):
             .where(
                 Order.driver_id == driver,
                 Order.delivery_status.in_(COMPLETED_STATUSES),
-                or_(DeliveryNote.status == "approved", DeliveryNote.id == None),
+                or_(
+                    DeliveryNote.status.in_(["draft", "approved"]),
+                    DeliveryNote.id == None,
+                ),
             )
             .order_by(Order.timestamp.desc())
         )
@@ -993,7 +1014,10 @@ async def list_followup_orders(driver: str = Query(...)):
             .where(
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
-                or_(DeliveryNote.status == "approved", DeliveryNote.id == None),
+                or_(
+                    DeliveryNote.status.in_(["draft", "approved"]),
+                    DeliveryNote.id == None,
+                ),
             )
         )
         rows = result.scalars().all()
@@ -1447,6 +1471,7 @@ async def admin_search(q: str = Query(...)):
 
 @app.get("/admin/verify", tags=["admin"])
 async def admin_verify(date: str = Query(...), q: str | None = Query(None)):
+    logger.info("admin_verify params date=%s q=%s", date, q)
     async for session in get_session():
         await sync_verification_orders(date, session)
         q_filter = []
@@ -1482,11 +1507,23 @@ async def admin_verify(date: str = Query(...), q: str | None = Query(None)):
         total = len(rows)
         verified = sum(1 for r in rows if r["verified"])
         missing = total - verified
+        logger.info(
+            "admin_verify result total=%d verified=%d missing=%d",
+            total,
+            verified,
+            missing,
+        )
         return {"rows": rows, "total": total, "verified": verified, "missing": missing}
 
 
 @app.put("/admin/verify/{item_id}", tags=["admin"])
 async def admin_verify_update(item_id: int, payload: VerificationUpdate):
+    logger.info(
+        "admin_verify_update id=%s driver_id=%s scan_time=%s",
+        item_id,
+        payload.driver_id,
+        payload.scan_time,
+    )
     async for session in get_session():
         item = await session.get(VerificationOrder, item_id)
         if not item:
@@ -1496,6 +1533,7 @@ async def admin_verify_update(item_id: int, payload: VerificationUpdate):
         if payload.scan_time is not None:
             item.scan_time = parse_timestamp(payload.scan_time) if payload.scan_time else None
         await session.commit()
+        logger.info("admin_verify_update succeeded for id=%s", item_id)
         return {"success": True}
 
 
