@@ -1,6 +1,8 @@
 import os
 import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import types
+import base64
 from fastapi.testclient import TestClient
 import asyncio
 
@@ -21,10 +23,19 @@ class DummyClient:
     def open_by_key(self, key):
         return DummySheet(self._rows)
 
-def make_gspread_stub(rows):
+def make_gspread_stub(rows, calls):
     def service_account(filename):
+        calls.append(("file", filename))
         return DummyClient(rows)
-    return types.SimpleNamespace(service_account=service_account)
+
+    def service_account_from_dict(info):
+        calls.append(("dict", info))
+        return DummyClient(rows)
+
+    return types.SimpleNamespace(
+        service_account=service_account,
+        service_account_from_dict=service_account_from_dict,
+    )
 
 
 def test_verify_endpoint(monkeypatch):
@@ -32,8 +43,14 @@ def test_verify_endpoint(monkeypatch):
         ["Date","Order","Customer","Phone","Address","City","COD"],
         ["2024-01-01","#111","Alice","555","Addr","Town","100"],
     ]
-    sys.modules['gspread'] = make_gspread_stub(rows)
-    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", "creds.json")
+    calls = []
+    sys.modules['gspread'] = make_gspread_stub(rows, calls)
+    import app.sheet_utils as sheet_utils
+    import importlib
+    importlib.reload(sheet_utils)
+    cred_json = '{"dummy": "yes"}'
+    b64 = base64.b64encode(cred_json.encode()).decode()
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_B64", b64)
     monkeypatch.setenv("VERIFICATION_SHEET_ID", "dummy")
 
     from app import main as app_main
@@ -53,3 +70,4 @@ def test_verify_endpoint(monkeypatch):
 
     resp = client.get("/admin/verify?date=2024-01-01")
     assert resp.json()["rows"][0]["driver"] == "abderrehman"
+    assert calls[0] == ("dict", {"dummy": "yes"})

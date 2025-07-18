@@ -17,13 +17,18 @@ The backend is configured entirely through environment variables:
   `admin123`).
 - `REDIS_URL` – optional Redis instance used for caching.
 - `SHEET_ID` – ID of the Google Sheet providing fallback order data.
-- `GOOGLE_APPLICATION_CREDENTIALS` – path to the service account JSON file.
-- `GOOGLE_CREDENTIALS_B64` – base64 encoded credentials; decode this value and
-  write it to a file if you cannot mount one.
+- `GOOGLE_CREDENTIALS_B64` – **preferred**; base64 encoded service account JSON.
+- `GOOGLE_APPLICATION_CREDENTIALS` – optional path to the credentials file.
 
-Either `GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_CREDENTIALS_B64` must be
+Either `GOOGLE_CREDENTIALS_B64` or `GOOGLE_APPLICATION_CREDENTIALS` must be
 provided for the Google Sheets fallback to work. If neither is set, Shopify data
 is used on its own.
+
+To create a credentials file from the encoded value you can run:
+
+```bash
+echo "$GOOGLE_CREDENTIALS_B64" | base64 -d > creds.json
+```
 
 ## Running the tests
 
