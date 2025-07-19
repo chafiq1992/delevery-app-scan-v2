@@ -50,3 +50,4 @@ uvicorn app.main:app --reload
 
 The Dockerfile provided in `backend/` runs the same app using Gunicorn when
 deployed.
+Further UI notes, including the chat-style timeline for order notes, are documented in [docs/chat_timeline_notes.md](docs/chat_timeline_notes.md).
