@@ -699,6 +699,19 @@ async def scan(
                 phone = phone or sheet_data.get("customer_phone", "")
                 address = address or sheet_data.get("address", "")
 
+        # As a final fallback, look for the order in the verification table
+        # to populate any missing details
+        if not customer_name or not phone or not address:
+            vo = await session.scalar(
+                select(VerificationOrder)
+                .where(VerificationOrder.order_name == order_number)
+                .order_by(VerificationOrder.id.desc())
+            )
+            if vo:
+                customer_name = customer_name or vo.customer_name or ""
+                phone = phone or vo.customer_phone or ""
+                address = address or vo.address or ""
+
         now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         scan_day = dt.datetime.now().strftime("%Y-%m-%d")
         driver_fee = calculate_driver_fee(tags)

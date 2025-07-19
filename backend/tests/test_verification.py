@@ -6,6 +6,9 @@ import base64
 from fastapi.testclient import TestClient
 import asyncio
 
+if os.path.exists("test.db"):
+    os.remove("test.db")
+
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
 
 
@@ -39,6 +42,8 @@ def make_gspread_stub(rows, calls):
 
 
 def test_verify_endpoint(monkeypatch):
+    if os.path.exists("test.db"):
+        os.remove("test.db")
     rows = [
         ["Date","Order","Customer","Phone","Address","City","COD"],
         ["2024-01-01","#111","Alice","555","Addr","Town","100"],
@@ -74,6 +79,8 @@ def test_verify_endpoint(monkeypatch):
 
 
 def test_verify_endpoint_defaults_date(monkeypatch):
+    if os.path.exists("test.db"):
+        os.remove("test.db")
     rows = [
         ["Order", "Customer", "Phone", "Address", "City", "COD"],
         ["#222", "Bob", "555", "Addr", "Town", "200"],
