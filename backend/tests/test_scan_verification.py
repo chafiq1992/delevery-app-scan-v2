@@ -17,6 +17,9 @@ from app.db import AsyncSessionLocal, VerificationOrder
 
 importlib.reload(app_main)
 
+async def dummy_sync(date, session):
+    pass
+
 class DummyResponse:
     def __init__(self, payload):
         self._payload = payload
@@ -48,6 +51,7 @@ async def create_verification_row():
 def test_scan_uses_verification_table(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     monkeypatch.setattr(app_main, "get_order_from_sheet", fake_sheet)
+    monkeypatch.setattr(app_main, "sync_verification_orders", dummy_sync)
 
     if os.path.exists("test.db"):
         os.remove("test.db")

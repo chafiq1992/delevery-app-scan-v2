@@ -17,6 +17,9 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
 from app import main as app_main
 importlib.reload(app_main)
 
+async def dummy_sync(date, session):
+    pass
+
 class DummyResponse:
     def __init__(self, payload):
         self._payload = payload
@@ -40,6 +43,7 @@ def fake_sheet(order_name: str):
 def test_scan_uses_sheet_when_shopify_incomplete(monkeypatch):
     monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     monkeypatch.setattr(app_main, "get_order_from_sheet", fake_sheet)
+    monkeypatch.setattr(app_main, "sync_verification_orders", dummy_sync)
     client = TestClient(app_main.app)
     asyncio.run(app_main.init_db())
 

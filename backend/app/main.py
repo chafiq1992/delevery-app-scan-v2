@@ -612,6 +612,11 @@ async def scan(
 ):
     async for session in get_session():
         await get_driver(session, driver)
+        scan_day = dt.datetime.now().strftime("%Y-%m-%d")
+        try:
+            await sync_verification_orders(scan_day, session)
+        except Exception:
+            logger.exception("sync_verification_orders failed")
         barcode = payload.barcode.strip()
         order_number = "#" + "".join(filter(str.isdigit, barcode))
 
@@ -713,7 +718,6 @@ async def scan(
                 address = address or vo.address or ""
 
         now_ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        scan_day = dt.datetime.now().strftime("%Y-%m-%d")
         driver_fee = calculate_driver_fee(tags)
 
         order = Order(
