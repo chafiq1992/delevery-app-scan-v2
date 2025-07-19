@@ -61,3 +61,31 @@ def test_lookup_strips_hash(monkeypatch):
     res2 = sheet_utils.get_order_from_sheet("#5678")
     assert res2["customer_name"] == "Bob"
     assert calls[0] == ("dict", {"dummy": "yes"})
+
+
+def test_load_sheet_orders_missing_date(monkeypatch):
+    rows = [
+        ["Order", "Customer"],
+        ["#111", "Alice"],
+    ]
+    calls = []
+    sys.modules['gspread'] = make_gspread_stub(rows, calls)
+    import app.sheet_utils as sheet_utils
+    importlib.reload(sheet_utils)
+    cred_json = '{"dummy": "yes"}'
+    b64 = base64.b64encode(cred_json.encode()).decode()
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_B64", b64)
+    monkeypatch.setenv("VERIFICATION_SHEET_ID", "dummy")
+
+    orders = sheet_utils.load_sheet_orders()
+    assert orders == [
+        {
+            "order_name": "#111",
+            "order_date": None,
+            "customer_name": "Alice",
+            "customer_phone": "",
+            "address": "",
+            "city": "",
+            "cod_total": "",
+        }
+    ]

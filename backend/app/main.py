@@ -264,7 +264,8 @@ async def sync_verification_orders(date_str: str, session: AsyncSession) -> None
         return
     created = 0
     for row in rows:
-        if row.get("order_date") != date_str:
+        row_date = row.get("order_date") or date_str
+        if row_date != date_str:
             continue
         existing = await session.scalar(
             select(VerificationOrder).where(
