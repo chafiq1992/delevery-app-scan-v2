@@ -122,9 +122,10 @@ def load_sheet_orders() -> List[Dict[str, str]]:
             continue
         order["order_name"] = row[indices["order"]].strip()
         if indices["date"] is not None and len(row) > indices["date"]:
-            order["order_date"] = row[indices["date"]].strip()
+            value = row[indices["date"]].strip()
+            order["order_date"] = value or None
         else:
-            order["order_date"] = ""
+            order["order_date"] = None
         order["customer_name"] = row[indices["name"]].strip() if indices["name"] is not None and len(row)>indices["name"] else ""
         order["customer_phone"] = row[indices["phone"]].strip() if indices["phone"] is not None and len(row)>indices["phone"] else ""
         order["address"] = row[indices["address"]].strip() if indices["address"] is not None and len(row)>indices["address"] else ""
