@@ -17,13 +17,25 @@
     .tab-content{display:none}
     .tab-content.active{display:block}
     .driver-section{margin-bottom:2rem}
-    .order-card{background:var(--card);border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+    .order-card{background:var(--card);border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1);position:relative}
     .order-card.flash{animation:flash 1s}
     @keyframes flash{0%{background:yellow;}100%{background:var(--card);}}
     .order-header{display:flex;justify-content:space-between;font-weight:bold;color:#004aad;margin-bottom:0.5rem}
     textarea,select,input{margin-top:0.3rem;padding:0.4rem;border:1px solid #ccc;border-radius:6px;width:100%}
     .follow-log{background:#f5f5f5}
     .comm-log{white-space:pre-line;font-size:0.85rem;color:#555;margin-top:0.3rem}
+    .timeline{display:flex;flex-direction:column;gap:0.3rem;max-height:250px;overflow-y:auto;position:relative;padding-right:1rem}
+    .bubble{padding:0.4rem 0.6rem;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,0.1);max-width:75%}
+    .bubble.system{align-self:flex-start;background:#e3f2fd}
+    .bubble.driver{align-self:flex-end;background:#e8f5e9}
+    .bubble.agent{align-self:flex-end;background:#eeeeee}
+    .bubble.status-delivered{background:#d4edda}
+    .bubble.status-problem{background:#fdecea}
+    .bubble .time{display:block;font-size:0.8em;color:#666;text-align:right;margin-top:2px}
+    .date-separator{text-align:center;font-size:0.8rem;color:#666;margin:0.4rem 0}
+    .chat-input{display:flex;gap:0.5rem;margin-top:0.5rem}
+    .chat-input textarea{flex:1;resize:none}
+    .scroll-bottom{position:absolute;bottom:0.5rem;right:0.5rem;background:#004aad;color:#fff;border-radius:50%;padding:0.3rem 0.4rem;font-size:1rem;cursor:pointer;display:none}
     .order-card.followup{border-left:4px solid #f44336}
     .urgent-icon{color:#f44336;font-size:1.1rem;margin-left:0.3rem}
     .status-select{margin-top:0.3rem;padding:0.4rem;border:1px solid #ccc;border-radius:6px;width:100%}
@@ -223,18 +235,17 @@ function renderSection(dataObj,container,includeInputs,showDone,showUndone){
         <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
         <div>${o.address||''}</div>
         <div>Timestamp: ${o.timestamp}</div>
-        ${o.driverNotes?`<div class="driver-log">🚚 ${formatDriverNotes(o.driverNotes)}</div>`:''}`;
+        <div id="tl-${key}" class="timeline"></div>`;
       if(includeInputs){
         html+=`<select class="status-select" onchange="updateOrderStatus('${d}','${o.orderName}',this.value)">`+
         deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''} style="background:${statusColors[s]||'#fff'}">${s}</option>`).join('')+
         `</select>`+
         `<input type="datetime-local" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${d}','${o.orderName}',this.value)">`+
         `<input type="number" value="${o.cashAmount||''}" placeholder="Cash" onchange="updateCash('${d}','${o.orderName}',this.value)">`+
-        `<div class="agent-note">👤 <textarea placeholder="Notes to driver" onchange="updateNotes('${d}','${o.orderName}',this.value)">${o.notes||''}</textarea></div>`;
+        `<div class="chat-input"><textarea id="input-${key}" placeholder="Add note..."></textarea><button onclick="sendAgentNote('${d}','${o.orderName}')">Send</button></div>`+
+        `<div id="scr-${key}" class="scroll-bottom" onclick="scrollTimelineBottom('${key}')">⬇</div>`;
       }
-      html+=`<textarea class="follow-log" placeholder="Follow log" onchange="updateFollow('${d}','${o.orderName}',this.value)">${o.followLog||''}</textarea>`+
-        `<div id="comm-${key}" class="comm-log"></div>`+
-        `${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}`;
+      html+=`<div id="comm-${key}" class="comm-log"></div>`;
       if(showDone){
         html+=`<button class="done-btn" onclick="markDone('${d}','${o.orderName}')">Done</button>`;
       }
@@ -248,7 +259,11 @@ function renderSection(dataObj,container,includeInputs,showDone,showUndone){
     });
     html+='</div>';
     container.innerHTML+=html;
-    filtered.forEach(o=>displayCommunicationLog(`${d}_${o.orderName}`));
+    filtered.forEach(o=>{
+      const k=`${d}_${o.orderName}`;
+      displayCommunicationLog(k);
+      buildTimeline(k,o);
+    });
   }
 }
 
@@ -292,17 +307,18 @@ function renderArchive(){
           `<div>${o.customerPhone?`📞 ${o.customerPhone}`:''}</div>`+
           `<div>${o.address||''}</div>`+
           `<div>Timestamp: ${o.timestamp}</div>`+
-          `${o.driverNotes?`<div class="driver-log">🚚 ${formatDriverNotes(o.driverNotes)}</div>`:''}`+
-          `${o.notes?`<div class="agent-note">👤 ${o.notes}</div>`:''}`+
-          `<textarea class="follow-log" readonly>${o.followLog||''}</textarea>`+
-          `${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}`+
+          `<div id="tl-${key}" class="timeline"></div>`+
           `</div>`;
       });
       html+='</details>';
     });
     html+='</div>';
     container.innerHTML+=html;
-    filtered.forEach(o=>displayCommunicationLog(`${d}_${o.orderName}`));
+    filtered.forEach(o=>{
+      const k=`${d}_${o.orderName}`;
+      displayCommunicationLog(k);
+      buildTimeline(k,o);
+    });
   }
 }
 function renderDone(){
@@ -434,6 +450,93 @@ function formatDriverNotes(notes){
     const msg=idx>0?l.slice(idx+3):l;
     return `<div class="log-item">🧾 <span class="log-time">${ts}</span> <span>${msg}</span></div>`;
   }).join('');
+}
+
+function parseTimeline(o){
+  const events=[];
+  if(o.statusLog){
+    o.statusLog.split('|').map(s=>s.trim()).filter(Boolean).forEach(l=>{
+      const m=l.match(/(.+) @ (.+)/);
+      if(m){
+        events.push({type:'status',status:m[1].trim(),time:new Date(m[2].trim().replace(' ','T'))});
+      }
+    });
+  }
+  if(o.driverNotes){
+    o.driverNotes.split('\n').filter(Boolean).forEach(l=>{
+      const idx=l.indexOf(' - ');
+      if(idx>0){
+        events.push({type:'driver',text:l.slice(idx+3),time:new Date(l.slice(0,idx).replace(' ','T'))});
+      }
+    });
+  }
+  if(o.notes){
+    o.notes.split('\n').filter(Boolean).forEach(l=>{
+      const idx=l.indexOf(' - ');
+      if(idx>0){
+        events.push({type:'agent',text:l.slice(idx+3),time:new Date(l.slice(0,idx).replace(' ','T'))});
+      } else {
+        events.push({type:'agent',text:l,time:new Date()});
+      }
+    });
+  }
+  events.sort((a,b)=>a.time-b.time);
+  return events;
+}
+
+function formatTime(t){return t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+
+function buildTimeline(key,o){
+  const el=document.getElementById('tl-'+key);if(!el)return;
+  el.innerHTML='';
+  const events=parseTimeline(o);
+  let prev='';
+  events.forEach(ev=>{
+    const d=ev.time.toISOString().slice(0,10);
+    if(d!==prev){
+      const ds=document.createElement('div');
+      ds.className='date-separator';
+      ds.textContent='— '+ev.time.toLocaleDateString()+' —';
+      el.appendChild(ds);prev=d;
+    }
+    const b=document.createElement('div');
+    let cls='bubble ';
+    if(ev.type==='status'){cls+='system';
+      if(ev.status==='Livré') cls+=' status-delivered';
+      if(['Returned','Annulé','Cancelled'].includes(ev.status)) cls+=' status-problem';
+      b.textContent='📦 '+ev.status;
+    }else if(ev.type==='driver'){cls+='driver';b.textContent='🚚 '+ev.text;}
+    else {cls+='agent';b.textContent='👤 '+ev.text;}
+    b.className=cls;
+    const ts=document.createElement('span');ts.className='time';ts.textContent=formatTime(ev.time);b.appendChild(ts);
+    el.appendChild(b);
+  });
+  scrollTimelineBottom(key);
+  el.addEventListener('scroll',()=>{
+    const arrow=document.getElementById('scr-'+key);
+    if(!arrow) return;
+    if(el.scrollTop<el.scrollHeight-el.clientHeight-10) arrow.style.display='block';
+    else arrow.style.display='none';
+  });
+}
+
+function scrollTimelineBottom(key){
+  const tl=document.getElementById('tl-'+key);if(!tl)return;tl.scrollTop=tl.scrollHeight;
+  const arrow=document.getElementById('scr-'+key);if(arrow)arrow.style.display='none';
+}
+
+function findOrder(driver,order){const arr=ordersData[driver]||[];return arr.find(o=>o.orderName===order);}
+
+function sendAgentNote(driver,order){
+  const key=`${driver}_${order}`;
+  const input=document.getElementById('input-'+key);
+  if(!input) return;const text=input.value.trim();if(!text) return;
+  const obj=findOrder(driver,order);if(!obj) return;
+  const ts=new Date().toISOString().slice(0,16).replace('T',' ');
+  obj.notes=(obj.notes?obj.notes+'\n':'')+`${ts} - ${text}`;
+  input.value='';
+  updateNotes(driver,order,obj.notes);
+  buildTimeline(key,obj);
 }
 
 function flashCard(id){
