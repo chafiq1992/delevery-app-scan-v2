@@ -50,7 +50,7 @@
     .tag-ch{background:#ffab91;color:#333}
     .filters{position:sticky;top:3.5rem;background:var(--bg);padding-bottom:0.5rem;z-index:100}
     #orders .filters{top:6.5rem}
-    #driverFilter{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem}
+    #driverFilter{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;width:100%}
     #driverFilter button{padding:0.3rem 0.6rem;border:none;border-radius:6px;color:#fff;cursor:pointer}
     .driver-log{background:#f5f5f5;padding:0.4rem;border-radius:6px;margin-top:0.3rem}
     .driver-log .log-item{display:flex;gap:0.3rem;align-items:center;font-size:0.85rem}
@@ -64,6 +64,7 @@
     .payout-amount{font-weight:bold;color:#2e7d32;font-size:1.1rem}
     @media(min-width:768px){
       .driver-section{max-width:700px;margin-left:auto;margin-right:auto}
+      #driverFilter button{flex:1}
     }
   </style>
 </head>
