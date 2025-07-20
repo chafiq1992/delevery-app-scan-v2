@@ -62,6 +62,9 @@
     .payout-card{background:var(--card);border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
     .payout-header{display:flex;justify-content:space-between;font-weight:bold;color:#004aad;margin-bottom:0.5rem}
     .payout-amount{font-weight:bold;color:#2e7d32;font-size:1.1rem}
+    @media(min-width:768px){
+      .driver-section{max-width:700px;margin-left:auto;margin-right:auto}
+    }
   </style>
 </head>
 <body>
@@ -423,13 +426,15 @@ function recordCall(key){
   saveCommLog(key,log);const [d,o]=key.split('_');
   apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)})
     .catch(e=>alert('Error logging call: '+e));
-  displayCommunicationLog(key);return true;}
+  const obj=findOrder(d,o);if(obj)obj.commLog=JSON.stringify(log);
+  displayCommunicationLog(key);if(obj)buildTimeline(key,obj);return true;}
 function recordWhatsapp(key){
   const log=getCommLog(key);log.whats=log.whats||[];log.whats.push(new Date().toLocaleString());
   saveCommLog(key,log);const [d,o]=key.split('_');
   apiPut(`/order/status?driver=${d}`,{order_name:o,comm_log:JSON.stringify(log)})
     .catch(e=>alert('Error logging message: '+e));
-  displayCommunicationLog(key);return true;}
+  const obj=findOrder(d,o);if(obj)obj.commLog=JSON.stringify(log);
+  displayCommunicationLog(key);if(obj)buildTimeline(key,obj);return true;}
 function displayCommunicationLog(key){const log=getCommLog(key);const el=document.getElementById('comm-'+key);if(!el)return;const calls=(log.calls||[]).map(t=>'📞 '+t).join('\n');const whats=(log.whats||[]).map(t=>'💬 '+t).join('\n');el.textContent=[calls,whats].filter(Boolean).join('\n');}
 
 function saveDone(){localStorage.setItem('doneOrders',JSON.stringify(doneData));}
@@ -480,6 +485,13 @@ function parseTimeline(o){
       }
     });
   }
+  if(o.commLog){
+    try{
+      const log=JSON.parse(o.commLog);
+      (log.calls||[]).forEach(t=>events.push({type:'call',time:new Date(t)}));
+      (log.whats||[]).forEach(t=>events.push({type:'whats',time:new Date(t)}));
+    }catch(e){}
+  }
   events.sort((a,b)=>a.time-b.time);
   return events;
 }
@@ -506,6 +518,8 @@ function buildTimeline(key,o){
       if(['Returned','Annulé','Cancelled'].includes(ev.status)) cls+=' status-problem';
       b.textContent='📦 '+ev.status;
     }else if(ev.type==='driver'){cls+='driver';b.textContent='🚚 '+ev.text;}
+    else if(ev.type==='call'){cls+='agent';b.textContent='📞 Appel';}
+    else if(ev.type==='whats'){cls+='agent';b.textContent='💬 WhatsApp';}
     else {cls+='agent';b.textContent='👤 '+ev.text;}
     b.className=cls;
     const ts=document.createElement('span');ts.className='time';ts.textContent=formatTime(ev.time);b.appendChild(ts);
