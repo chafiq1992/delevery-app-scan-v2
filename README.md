@@ -32,7 +32,8 @@ echo "$GOOGLE_CREDENTIALS_B64" | base64 -d > creds.json
 
 ## Running the tests
 
-Install the requirements from `backend/requirements.txt` and run:
+Install the requirements from `backend/requirements.txt` (which now includes
+`aiosqlite`) and run:
 
 ```bash
 cd backend
