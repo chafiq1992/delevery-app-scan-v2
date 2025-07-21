@@ -52,7 +52,11 @@ def test_scan_uses_sheet_when_shopify_incomplete(monkeypatch):
 
     resp = client.get("/orders?driver=abderrehman")
     assert resp.status_code == 200
-    order = resp.json()[0]
-    assert order["customerName"] == "Sheet Name"
-    assert order["customerPhone"] == "555-123"
-    assert order["address"] == "Sheet Address"
+    assert resp.json() == []  # order hidden until note approved
+
+    notes = client.get("/notes?driver=abderrehman").json()
+    assert len(notes) == 1
+    note_id = notes[0]["id"]
+    note = client.get(f"/notes/{note_id}?driver=abderrehman").json()
+    assert note["items"][0]["orderName"] == "#1111"
+    assert note["items"][0]["cashAmount"] >= 0

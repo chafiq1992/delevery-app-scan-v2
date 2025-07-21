@@ -64,8 +64,12 @@ def test_scan_uses_verification_table(monkeypatch):
     assert resp.status_code == 200
 
     resp = client.get("/orders?driver=abderrehman")
-    order = resp.json()[0]
-    assert order["customerName"] == "Verif Name"
-    assert order["customerPhone"] == "555-222"
-    assert order["address"] == "Verif Address"
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    notes = client.get("/notes?driver=abderrehman").json()
+    assert len(notes) == 1
+    note_id = notes[0]["id"]
+    note = client.get(f"/notes/{note_id}?driver=abderrehman").json()
+    assert note["items"][0]["orderName"] == "#1111"
 

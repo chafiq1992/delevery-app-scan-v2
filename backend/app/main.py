@@ -95,7 +95,13 @@ DELIVERY_STATUSES = [
     "Returned",
     "Deleted",
 ]
-COMPLETED_STATUSES = ["Livré", "Deleted"]
+COMPLETED_STATUSES = [
+    "Livré",
+    "Annulé",
+    "Refusé",
+    "Returned",
+    "Deleted",
+]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
@@ -909,7 +915,7 @@ async def list_active_orders(driver: str = Query(...)):
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
                 or_(
-                    DeliveryNote.status.in_(["draft", "approved"]),
+                    DeliveryNote.status == "approved",
                     DeliveryNote.id == None,
                 ),
             )
@@ -981,7 +987,7 @@ async def list_archived_orders(driver: str = Query(...)):
                 Order.driver_id == driver,
                 Order.delivery_status.in_(COMPLETED_STATUSES),
                 or_(
-                    DeliveryNote.status.in_(["draft", "approved"]),
+                    DeliveryNote.status == "approved",
                     DeliveryNote.id == None,
                 ),
             )
@@ -1033,7 +1039,7 @@ async def list_followup_orders(driver: str = Query(...)):
                 Order.driver_id == driver,
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
                 or_(
-                    DeliveryNote.status.in_(["draft", "approved"]),
+                    DeliveryNote.status == "approved",
                     DeliveryNote.id == None,
                 ),
             )

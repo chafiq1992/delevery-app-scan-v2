@@ -168,6 +168,7 @@
     <button class="nav-tab active" onclick="showTab('scanner')">📷 Scanner</button>
     <button class="nav-tab" onclick="showTab('notes')">📑 Bon</button>
     <button class="nav-tab" onclick="showTab('orders')">📋 Orders</button>
+    <button class="nav-tab" onclick="showTab('archive')">🗄️ Archive</button>
     <button class="nav-tab" onclick="showTab('payouts')">💰 Payouts</button>
     <button class="nav-tab" onclick="showTab('stats')">📊 Stats</button>
   </div>
@@ -200,6 +201,13 @@
     <div id="ordersContainer" class="orders-container">
       <div class="loading">Click here to load orders</div>
       <button class="scan-btn" onclick="loadOrders()">📋 Load Orders</button>
+    </div>
+  </div>
+
+  <div id="archive-tab" class="tab-content">
+    <div id="archiveContainer" class="orders-container">
+      <div class="loading">Click here to load archive</div>
+      <button class="scan-btn" onclick="loadArchive()">🗄️ Load Archive</button>
     </div>
   </div>
 
@@ -355,7 +363,7 @@
   /* ─────────────────────────────────────────────────────────────
      2.  Globals copied from old code
      ────────────────────────────────────────────────────────────*/
-  let scanner, orders = [], payouts = [], notes = [];
+  let scanner, orders = [], archive = [], payouts = [], notes = [];
   const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
   const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
 
@@ -521,6 +529,7 @@
     document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
     document.getElementById(`${t}-tab`).classList.add('active');
     if(t==='orders' && !orders.length)  loadOrders();
+    if(t==='archive' && !archive.length) loadArchive();
     if(t==='payouts' && !payouts.length) loadPayouts();
     if(t==='notes'  && !notes.length)  loadNotes();
     if(t==='stats') applyDefaultRange();
@@ -708,6 +717,38 @@
     buildOrdersChart();
     orders.forEach(o=>displayCommunicationLog(o.orderName));
     startCountdown();
+  }
+
+  function loadArchive(){
+    document.getElementById('archiveContainer').innerHTML='<div class="loading">Loading archive...</div>';
+    apiGet(`/orders/archive?driver=${driver_id}`)
+      .then(displayArchive)
+      .catch(e=>{
+        const msg = e==='offline' ? 'Offline - queued for sync' : '❌ '+e;
+        document.getElementById('archiveContainer').innerHTML='<div class="no-orders">'+msg+'</div>';
+      });
+  }
+
+  function displayArchive(al){
+    archive = al || [];
+    const c = document.getElementById('archiveContainer');
+    if(!archive.length){ c.innerHTML='<div class="no-orders">📭 No archived orders.</div>'; return; }
+    let h = '';
+    archive.forEach(o=>{
+      const tc=getPrimaryTag(o.tags);
+      const delivered=o.deliveryStatus==='Livré';
+      h+=`<div class="order-card ${delivered?'delivered':''}">`+
+          `<div class="order-header"><div class="order-name">${o.orderName}</div>`+
+          `<div class="scan-date">📅 ${o.scanDate}</div></div>`+
+          `<div class="customer-info">`+
+          `<div class="customer-name">${o.customerName||'N/A'}</div>`+
+          `<div class="address">📍 ${o.address||'No address provided'}</div>`+
+          `${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}`+
+          `</div>`+
+          `${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\\|/g,'\\n')}</div>`:''}`+
+          `</div>`;
+    });
+    c.innerHTML=h;
   }
 
 
@@ -1038,6 +1079,7 @@
     startScanner,
     manualAdd,
     loadOrders,
+    loadArchive,
     updateOrderStatus,
     addOrderNote,
     updateCashAmount,
