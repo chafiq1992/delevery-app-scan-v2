@@ -533,6 +533,25 @@ async def get_open_delivery_note(session: AsyncSession, driver_id: str) -> Deliv
     return note
 
 
+async def update_verification_from_order(
+    session: AsyncSession, order_name: str, driver_id: str, ts: dt.datetime
+) -> None:
+    """Ensure verification rows for the order have driver/scan time set."""
+    rows = await session.execute(
+        select(VerificationOrder).where(VerificationOrder.order_name == order_name)
+    )
+    updated = False
+    for v in rows.scalars():
+        if not v.driver_id:
+            v.driver_id = driver_id
+            updated = True
+        if not v.scan_time:
+            v.scan_time = ts
+            updated = True
+    if updated:
+        await session.commit()
+
+
 async def add_to_payout(
     session: AsyncSession,
     driver_id: str,
@@ -758,6 +777,10 @@ async def scan(
             )
         )
         await session.commit()
+        # Update verification table with driver/scan time
+        await update_verification_from_order(
+            session, order_number, driver, order.timestamp
+        )
 
         await cache_delete("orders", driver)
         await manager.broadcast(
@@ -1552,6 +1575,16 @@ async def admin_verify(
         result = await session.execute(stmt)
         rows_map: dict[str, dict] = {}
         for v in result.scalars():
+            order = await session.scalar(
+                select(Order)
+                .where(Order.order_name == v.order_name)
+                .order_by(Order.timestamp.desc())
+            )
+            if order:
+                if not v.driver_id:
+                    v.driver_id = order.driver_id
+                if not v.scan_time:
+                    v.scan_time = order.timestamp
             row = {
                 "id": v.id,
                 "orderName": v.order_name,
@@ -1562,10 +1595,12 @@ async def admin_verify(
                 "city": v.city,
                 "driver": v.driver_id or "",
                 "scanTime": v.scan_time.strftime("%Y-%m-%d %H:%M:%S") if v.scan_time else "",
+                "status": order.delivery_status if order else "",
                 "verified": bool(v.driver_id and v.scan_time),
             }
             if v.order_name not in rows_map:
                 rows_map[v.order_name] = row
+        await session.commit()
         rows = list(rows_map.values())
         total = len(rows)
         verified = sum(1 for r in rows if r["verified"])
