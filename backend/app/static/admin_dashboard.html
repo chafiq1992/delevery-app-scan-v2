@@ -435,7 +435,7 @@ async function loadVerify(){
     const tr=document.createElement('tr');
     tr.dataset.id=r.id;
     if(!r.verified)tr.classList.add('bg-yellow-100');
-    tr.innerHTML=`<td class="p-2">${r.orderName}</td><td class="p-2">${r.customerName}</td><td class="p-2">${r.customerPhone}</td><td class="p-2">${r.address}</td><td class="p-2">${r.codTotal}</td><td class="p-2">${r.city}</td><td class="p-2" data-field="driver">${r.driver}</td><td class="p-2" data-field="scan">${r.scanTime}</td><td class="p-2">${r.verified?'✔':'⚠'}</td>`;
+    tr.innerHTML=`<td class="p-2">${r.orderName}</td><td class="p-2">${r.customerName}</td><td class="p-2">${r.customerPhone}</td><td class="p-2">${r.address}</td><td class="p-2">${r.codTotal}</td><td class="p-2">${r.city}</td><td class="p-2" data-field="driver">${r.driver}</td><td class="p-2" data-field="scan">${r.scanTime}</td><td class="p-2">${r.status||''}</td>`;
     body.appendChild(tr);
     if(r.verified)verified++;
   });
