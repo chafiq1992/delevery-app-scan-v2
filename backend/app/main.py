@@ -269,14 +269,18 @@ async def sync_verification_orders(date_str: str, session: AsyncSession) -> None
     if not rows:
         return
     created = 0
+    seen: set[str] = set()
     for row in rows:
         row_date = row.get("order_date") or date_str
         if row_date != date_str:
             continue
+        order_num = row["order_name"]
+        if order_num in seen:
+            continue
+        seen.add(order_num)
         existing = await session.scalar(
             select(VerificationOrder).where(
-                VerificationOrder.order_date == date_str,
-                VerificationOrder.order_name == row["order_name"],
+                VerificationOrder.order_name == order_num
             )
         )
         if existing:
@@ -284,7 +288,7 @@ async def sync_verification_orders(date_str: str, session: AsyncSession) -> None
             if not existing.driver_id:
                 scanned = await session.scalar(
                     select(Order)
-                    .where(Order.order_name == row["order_name"])
+                    .where(Order.order_name == order_num)
                     .order_by(Order.timestamp.desc())
                 )
                 if scanned:
@@ -297,12 +301,12 @@ async def sync_verification_orders(date_str: str, session: AsyncSession) -> None
 
         scanned = await session.scalar(
             select(Order)
-            .where(Order.order_name == row["order_name"])
+            .where(Order.order_name == order_num)
             .order_by(Order.timestamp.desc())
         )
         vo = VerificationOrder(
             order_date=date_str,
-            order_name=row["order_name"],
+            order_name=order_num,
             customer_name=row.get("customer_name", ""),
             customer_phone=row.get("customer_phone", ""),
             address=row.get("address", ""),
@@ -1542,29 +1546,30 @@ async def admin_verify(
                 VerificationOrder.order_date >= (start or end),
                 VerificationOrder.order_date <= (end or start),
                 *q_filter,
-            ).order_by(VerificationOrder.order_date, VerificationOrder.order_name)
+            ).order_by(VerificationOrder.id.desc())
         else:
             stmt = stmt.where(
                 VerificationOrder.order_date == date,
                 *q_filter,
-            ).order_by(VerificationOrder.order_name)
+            ).order_by(VerificationOrder.id.desc())
         result = await session.execute(stmt)
-        rows = []
+        rows_map: dict[str, dict] = {}
         for v in result.scalars():
-            rows.append(
-                {
-                    "id": v.id,
-                    "orderName": v.order_name,
-                    "customerName": v.customer_name,
-                    "customerPhone": v.customer_phone,
-                    "address": v.address,
-                    "codTotal": v.cod_total,
-                    "city": v.city,
-                    "driver": v.driver_id or "",
-                    "scanTime": v.scan_time.strftime("%Y-%m-%d %H:%M:%S") if v.scan_time else "",
-                    "verified": bool(v.driver_id and v.scan_time),
-                }
-            )
+            row = {
+                "id": v.id,
+                "orderName": v.order_name,
+                "customerName": v.customer_name,
+                "customerPhone": v.customer_phone,
+                "address": v.address,
+                "codTotal": v.cod_total,
+                "city": v.city,
+                "driver": v.driver_id or "",
+                "scanTime": v.scan_time.strftime("%Y-%m-%d %H:%M:%S") if v.scan_time else "",
+                "verified": bool(v.driver_id and v.scan_time),
+            }
+            if v.order_name not in rows_map:
+                rows_map[v.order_name] = row
+        rows = list(rows_map.values())
         total = len(rows)
         verified = sum(1 for r in rows if r["verified"])
         missing = total - verified

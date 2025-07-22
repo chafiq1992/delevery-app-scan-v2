@@ -104,3 +104,32 @@ def test_verify_endpoint_defaults_date(monkeypatch):
     data = resp.json()
     assert data["total"] == 1
     assert data["rows"][0]["orderName"] == "#222"
+
+
+def test_verify_endpoint_deduplicates(monkeypatch):
+    if os.path.exists("test.db"):
+        os.remove("test.db")
+    rows = [
+        ["Date", "Order", "Customer"],
+        ["2024-01-01", "#333", "Bob"],
+        ["2024-01-02", "#333", "Bob"],
+    ]
+    calls = []
+    sys.modules['gspread'] = make_gspread_stub(rows, calls)
+    import app.sheet_utils as sheet_utils
+    import importlib
+    importlib.reload(sheet_utils)
+    cred_json = '{"dummy": "yes"}'
+    b64 = base64.b64encode(cred_json.encode()).decode()
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_B64", b64)
+    monkeypatch.setenv("VERIFICATION_SHEET_ID", "dummy")
+
+    from app import main as app_main
+    client = TestClient(app_main.app)
+    asyncio.run(app_main.init_db())
+
+    resp = client.get("/admin/verify?start=2024-01-01&end=2024-01-02")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["rows"][0]["orderName"] == "#333"
