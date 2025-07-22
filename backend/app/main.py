@@ -1494,10 +1494,39 @@ async def admin_search(q: str = Query(...)):
 
 
 @app.get("/admin/verify", tags=["admin"])
-async def admin_verify(date: str = Query(...), q: str | None = Query(None)):
-    logger.info("admin_verify params date=%s q=%s", date, q)
+async def admin_verify(
+    date: str | None = Query(None),
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+    q: str | None = Query(None),
+):
+    """Return verification orders for a single day or date range."""
+    logger.info(
+        "admin_verify params date=%s start=%s end=%s q=%s",
+        date,
+        start,
+        end,
+        q,
+    )
     async for session in get_session():
-        await sync_verification_orders(date, session)
+        dates_to_sync: list[str] = []
+        if start or end:
+            s = dt.datetime.strptime(start or end or "", "%Y-%m-%d").date()
+            e = dt.datetime.strptime(end or start or "", "%Y-%m-%d").date()
+            if e < s:
+                s, e = e, s
+            current = s
+            while current <= e:
+                dates_to_sync.append(current.strftime("%Y-%m-%d"))
+                current += dt.timedelta(days=1)
+        elif date:
+            dates_to_sync.append(date)
+        else:
+            raise HTTPException(status_code=400, detail="Date or range required")
+
+        for d in dates_to_sync:
+            await sync_verification_orders(d, session)
+
         q_filter = []
         if q:
             q_lower = f"%{q.lower()}%"
@@ -1507,11 +1536,19 @@ async def admin_verify(date: str = Query(...), q: str | None = Query(None)):
                     VerificationOrder.customer_name.ilike(q_lower),
                 )
             )
-        result = await session.execute(
-            select(VerificationOrder)
-            .where(VerificationOrder.order_date == date, *q_filter)
-            .order_by(VerificationOrder.order_name)
-        )
+        stmt = select(VerificationOrder)
+        if start or end:
+            stmt = stmt.where(
+                VerificationOrder.order_date >= (start or end),
+                VerificationOrder.order_date <= (end or start),
+                *q_filter,
+            ).order_by(VerificationOrder.order_date, VerificationOrder.order_name)
+        else:
+            stmt = stmt.where(
+                VerificationOrder.order_date == date,
+                *q_filter,
+            ).order_by(VerificationOrder.order_name)
+        result = await session.execute(stmt)
         rows = []
         for v in result.scalars():
             rows.append(
