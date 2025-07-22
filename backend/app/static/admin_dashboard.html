@@ -113,9 +113,6 @@
   <!-- Order Verification tab -->
   <div id="verify" class="tab-content">
     <div class="flex flex-wrap items-center gap-2 mb-2">
-      <button onclick="changeVerifyDate(-1)" class="px-2">◀</button>
-      <input type="date" id="verifyDate" class="border p-1 rounded" />
-      <button onclick="changeVerifyDate(1)" class="px-2">▶</button>
       <input id="verifySearch" placeholder="Search..." class="flex-grow border p-1 rounded" />
       <button onclick="loadVerify()" class="bg-blue-600 text-white px-3 py-1 rounded">Apply</button>
       <button onclick="syncVerify()" class="bg-green-600 text-white px-3 py-1 rounded">Sync Sheet</button>
@@ -419,19 +416,16 @@ document.getElementById('payoutsBody').addEventListener('dblclick',async e=>{
 
 // ----------------------- ORDER VERIFICATION --------------------
 function loadVerifyTab(){
-  const d=document.getElementById('verifyDate');
-  if(!d.value)d.value=formatDate(new Date());
-  loadVerify();
-}
-function changeVerifyDate(off){
-  const d=document.getElementById('verifyDate');
-  const dt=new Date(d.value);dt.setDate(dt.getDate()+off);d.value=formatDate(dt);
   loadVerify();
 }
 async function loadVerify(){
-  const date=document.getElementById('verifyDate').value;
+  const start=document.getElementById('startDate').value;
+  const end=document.getElementById('endDate').value;
   const q=document.getElementById('verifySearch').value.trim();
-  let url=`/admin/verify?date=${date}`;
+  let url='/admin/verify';
+  if(start)url+=`?start=${start}`;
+  if(end)url+=`${start?'&':'?'}end=${end}`;
+  if(!start&&!end)url+='?date='+formatDate(new Date());
   if(q)url+=`&q=${encodeURIComponent(q)}`;
   const data=await fetch(url).then(r=>r.json()).catch(()=>({rows:[]}));
   const body=document.getElementById('verifyBody');
@@ -449,8 +443,15 @@ async function loadVerify(){
 }
 
 async function syncVerify(){
-  const date=document.getElementById('verifyDate').value;
-  await fetch(`/admin/verify/sync?date=${date}`,{method:'POST'});
+  const start=document.getElementById('startDate').value;
+  const end=document.getElementById('endDate').value||start;
+  let current=new Date(start);
+  const endDate=new Date(end);
+  while(current<=endDate){
+    const d=formatDate(current);
+    await fetch(`/admin/verify/sync?date=${d}`,{method:'POST'});
+    current.setDate(current.getDate()+1);
+  }
   loadVerify();
 }
 document.getElementById('verifyBody').addEventListener('dblclick',async e=>{
