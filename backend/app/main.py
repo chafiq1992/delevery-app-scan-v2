@@ -97,9 +97,6 @@ DELIVERY_STATUSES = [
 ]
 COMPLETED_STATUSES = [
     "Livré",
-    "Returned",
-    "Annulé",
-    "Refusé",
     "Deleted",
 ]
 NORMAL_DELIVERY_FEE = 20
