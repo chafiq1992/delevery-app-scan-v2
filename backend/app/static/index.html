@@ -615,7 +615,7 @@
   }
 
   function displayOrders(ol){
-    orders = ol || [];
+    orders = (ol || []).filter(o=>!['Livré','Annulé','Refusé','Returned','Canceled','Cancelled'].includes(o.deliveryStatus));
     const c = document.getElementById('ordersContainer');
     if(!orders.length){ c.innerHTML='<div class="no-orders">📭 No active orders found.</div>'; return; }
 
@@ -735,20 +735,76 @@
     if(!archive.length){ c.innerHTML='<div class="no-orders">📭 No archived orders.</div>'; return; }
     let h = '';
     archive.forEach(o=>{
-      const tc=getPrimaryTag(o.tags);
-      const delivered=o.deliveryStatus==='Livré';
-      h+=`<div class="order-card ${delivered?'delivered':''}">`+
-          `<div class="order-header"><div class="order-name">${o.orderName}</div>`+
-          `<div class="scan-date">📅 ${o.scanDate}</div></div>`+
-          `<div class="customer-info">`+
-          `<div class="customer-name">${o.customerName||'N/A'}</div>`+
-          `<div class="address">📍 ${o.address||'No address provided'}</div>`+
-          `${tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:''}`+
-          `</div>`+
-          `${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\\|/g,'\\n')}</div>`:''}`+
-          `</div>`;
+      const tc = getPrimaryTag(o.tags);
+      const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
+      const fee = isExchange ? 10 : 20;
+      const delivered = o.deliveryStatus === 'Livré';
+      const waMsg = encodeURIComponent(
+        `Salam/Bonjour ${o.customerName||''}, votre livreur ${driver_id} vous contacte. ` +
+        `J'ai votre commande numéro ${o.orderName} d'un total de ${o.cashAmount||0} DH. ` +
+        `Merci de m'envoyer votre localisation pour pouvoir livrer à votre adresse exacte. ` +
+        `\nالسلام عليكم ${o.customerName||''}، معك عامل التوصيل ${driver_id}. ` +
+        `أتوفر على طلبك رقم ${o.orderName} بمبلغ إجمالي ${o.cashAmount||0} درهم. ` +
+        `المرجو إرسال موقعك عبر خرائط جوجل لتسليم الطلب إلى عنوانك الصحيح.`
+      );
+      const waUrl = `https://wa.me/${o.customerPhone}?text=${waMsg}`;
+      h += `<div class="order-card ${delivered?'delivered':''}">
+        <div class="order-header">
+          <div class="order-name">${o.orderName}</div>
+          <div class="scan-date">📅 ${o.scanDate}</div>
+        </div>
+        <div class="customer-info">
+          <div class="customer-name">${o.customerName||'N/A'}</div>` +
+          (o.customerPhone?`<div class="customer-phone"><span>📞 ${o.customerPhone}</span><a href="tel:${o.customerPhone}" class="phone-btn" onclick="return recordCall('${o.orderName}', '${o.customerPhone}')">📞</a><a href="${waUrl}" target="_blank" class="wa-btn" onclick="return recordWhatsapp('${o.orderName}')">💬</a></div>`:'') +
+          `<div class="address">📍 ${o.address||'No address provided'}</div>` +
+          (tc?`<span class="tag-badge tag-${tc}">${tc}</span>`:'') +
+          `<div id="comm-${o.orderName}" class="comm-log"></div>
+        </div>
+        <div class="order-details">
+          <div class="detail-item">
+            <div class="detail-label">Driver Fee</div>
+            <div class="detail-value fee-display ${isExchange?'fee-exchange':''}">${fee} DH ${isExchange?'(Exchange)':''}</div>
+          </div>
+        </div>
+        <div class="agent-notes">
+          <div class="agent-label">👤 Agent Notes</div>
+          <div class="agent-text">${o.notes||''}</div>
+        </div>
+        <details class="actions-block">
+          <summary>Actions</summary>
+          <div class="actions-content">
+            <div class="detail-item">
+              <div class="detail-label">Cash Amount (DH)</div>
+              <input type="number" class="cash-input" value="${o.cashAmount||''}" placeholder="Enter cash amount" onchange="updateCashAmount('${o.orderName}',this.value)">
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">Schedule</div>
+              <input type="datetime-local" class="schedule-input" value="${o.scheduledTime||''}" onchange="updateScheduledTime('${o.orderName}',this.value)">
+              ${o.urgent?'<span class="urgent-icon">🔔</span>':''}
+              ${o.scheduledTime?`<span class="countdown" data-time="${o.scheduledTime}"></span>`:''}
+            </div>
+            <div class="status-buttons">
+              <button class="status-btn delivered" onclick="updateOrderStatus('${o.orderName}','Livré',this)">Delivered</button>
+              <button class="status-btn returned" onclick="updateOrderStatus('${o.orderName}','Returned',this)">Returned</button>
+              <button class="status-btn cancelled" onclick="updateOrderStatus('${o.orderName}','Annulé',this)">Annulé</button>
+              <button class="status-btn rescheduled" onclick="updateOrderStatus('${o.orderName}','Rescheduled',this)">Resched</button>
+            </div>
+            <select class="status-select" onchange="updateOrderStatus('${o.orderName}',this.value,this)">
+              ${deliveryStatuses.map(s=>`<option value="${s}"${s===o.deliveryStatus?' selected':''}>${s}</option>`).join('')}
+            </select>
+          </div>
+        </details>
+        <div class="driver-notes-section">
+          <textarea id="note-${o.orderName}" class="driver-note-input" placeholder="Add note…"></textarea>
+          <button class="add-note-btn" onclick="addOrderNote('${o.orderName}')">Add Note</button>
+          <div class="notes-list">${(o.driverNotes||'').split('\n').filter(Boolean).map(n=>`<div class="note-item">🚚 ${n}</div>`).join('')}</div>
+          ${o.statusLog?`<div class="status-log">${o.statusLog.replace(/\|/g,'\n')}</div>`:''}
+        </div>
+      </div>`;
     });
-    c.innerHTML=h;
+    c.innerHTML = h;
+    archive.forEach(o=>displayCommunicationLog(o.orderName));
+    startCountdown();
   }
 
 
