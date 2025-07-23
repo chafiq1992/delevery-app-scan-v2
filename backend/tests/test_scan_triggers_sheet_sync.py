@@ -1,5 +1,4 @@
 import os
-import httpx
 import asyncio
 import importlib
 import sys
@@ -16,22 +15,11 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
 from app import main as app_main
 importlib.reload(app_main)
 
-class DummyResponse:
-    def __init__(self, payload):
-        self._payload = payload
-    def raise_for_status(self):
-        pass
-    def json(self):
-        return self._payload
-
-async def fake_get(self, url, auth=None, params=None):
-    return DummyResponse({"orders": []})
 
 def test_scan_triggers_sheet_sync(monkeypatch):
     calls = []
     async def dummy_sync(date, session):
         calls.append(date)
-    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     monkeypatch.setattr(app_main, "get_order_from_sheet", lambda x: None)
     monkeypatch.setattr(app_main, "sync_verification_orders", dummy_sync)
     client = TestClient(app_main.app)
