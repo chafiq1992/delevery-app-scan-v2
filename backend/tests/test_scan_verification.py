@@ -1,4 +1,5 @@
 import os
+import httpx
 import asyncio
 import importlib
 import sys
@@ -19,6 +20,17 @@ importlib.reload(app_main)
 async def dummy_sync(date, session):
     pass
 
+class DummyResponse:
+    def __init__(self, payload):
+        self._payload = payload
+    def raise_for_status(self):
+        pass
+    def json(self):
+        return self._payload
+
+async def fake_get(self, url, auth=None, params=None):
+    # Return Shopify order without shipping address
+    return DummyResponse({"orders": [{"id": 1, "name": params["name"], "created_at": "2024-01-01T00:00:00Z", "fulfillment_status": "fulfilled", "tags": ""}]})
 
 def fake_sheet(order_name: str):
     return None
@@ -37,6 +49,7 @@ async def create_verification_row():
 
 
 def test_scan_uses_verification_table(monkeypatch):
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
     monkeypatch.setattr(app_main, "get_order_from_sheet", fake_sheet)
     monkeypatch.setattr(app_main, "sync_verification_orders", dummy_sync)
 

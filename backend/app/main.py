@@ -1,7 +1,8 @@
 """
 delivery-app FastAPI backend
 ───────────────────────────
-✓ Barcode / manual scan stored in the database using data from Google Sheets
+✓ Barcode / manual scan stored in the database (orders looked up from Shopify)
+✓ Optionally falls back to Google Sheets when Shopify details are missing
 ✓ SQLAlchemy models for drivers, orders & payouts
 ✓ Driver-fee calculation + payout roll-up
 ✓ Order & payout queries for the mobile / web app
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 import datetime as dt
 from typing import List, Optional
 from datetime import timezone
+import httpx
 from fastapi import (
     FastAPI,
     HTTPException,
@@ -63,6 +65,22 @@ from .db import (
 # ───────────────────────────────────────────────────────────────
 # CONFIGURATION  ––––– edit via env-vars in Render dashboard
 # ───────────────────────────────────────────────────────────────
+
+SHOPIFY_STORES = [
+    {
+        "name": "irrakids",
+        "api_key": os.getenv("IRRAKIDS_API_KEY", ""),
+        "password": os.getenv("IRRAKIDS_PASSWORD", ""),
+        "domain": "nouralibas.myshopify.com",
+    },
+    {
+        "name": "irranova",
+        "api_key": os.getenv("IRRANOVA_API_KEY", ""),
+        "password": os.getenv("IRRANOVA_PASSWORD", ""),
+        "domain": "fdd92b-2e.myshopify.com",
+    },
+]
+
 
 DELIVERY_STATUSES = [
     "Dispatched",
@@ -437,8 +455,23 @@ def parse_timestamp(val: str) -> dt.datetime:
             return dt.datetime.strptime(val, fmt)
         except ValueError:
             continue
-# Return ISO timestamp value when parsing succeeds
     return dt.datetime.fromisoformat(val)
+
+
+async def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
+    """Call Shopify Admin API by order name (#1234) using async HTTP."""
+    auth = (store_cfg["api_key"], store_cfg["password"])
+    url = f"https://{store_cfg['domain']}/admin/api/2023-07/orders.json"
+    params = {"name": order_name}
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            r = await client.get(url, auth=auth, params=params)
+            r.raise_for_status()
+        except httpx.HTTPError:
+            return None
+    data = r.json()
+    return data.get("orders", [{}])[0] if data.get("orders") else None
+
 
 # ───────────────────────────────────────────────────────────────
 # Core functions – Database logic
@@ -635,16 +668,66 @@ async def scan(
                 deliveryStatus=existing.delivery_status,
             )
 
-        # Order details are loaded from the sheet or verification tables
-        chosen_store_name = ""
-        tags = ""
-        fulfillment = ""
-        order_status = "open"
+        # --- Shopify look-up (unchanged) ----------------------------------
+        window_start = dt.datetime.now(timezone.utc) - dt.timedelta(days=50)
+        chosen_order, chosen_store_name = None, ""
+        for store in SHOPIFY_STORES:
+            order = await get_order_from_store(order_number, store)
+            if order:
+                created_at = dt.datetime.fromisoformat(
+                    order["created_at"].replace("Z", "+00:00")
+                )
+                if created_at >= window_start and (
+                    not chosen_order
+                    or created_at
+                    > dt.datetime.fromisoformat(
+                        chosen_order["created_at"].replace("Z", "+00:00")
+                    )
+                ):
+                    chosen_order, chosen_store_name = order, store["name"]
+
+        tags = chosen_order.get("tags", "") if chosen_order else ""
+        fulfillment = (
+            chosen_order.get("fulfillment_status", "unfulfilled")
+            if chosen_order
+            else ""
+        )
+        order_status = (
+            "closed" if (chosen_order and chosen_order.get("cancelled_at")) else "open"
+        )
         customer_name = phone = address = ""
         cash_amount = 0.0
         result_msg = "❌ Not found"
 
-        # Try to load missing details from the Google Sheet
+        if chosen_order:
+            result_msg = (
+                "⚠️ Cancelled"
+                if chosen_order.get("cancelled_at")
+                else "❌ Unfulfilled" if fulfillment != "fulfilled" else "✅ OK"
+            )
+            cash_amount = float(
+                chosen_order.get("total_outstanding")
+                or chosen_order.get("total_price")
+                or 0
+            )
+            if chosen_order.get("shipping_address"):
+                sa = chosen_order["shipping_address"]
+                customer_name = sa.get("name", "")
+                phone = sa.get("phone", "") or chosen_order.get("phone", "")
+                address = ", ".join(
+                    filter(
+                        None,
+                        [
+                            sa.get("address1"),
+                            sa.get("address2"),
+                            sa.get("city"),
+                            sa.get("province"),
+                        ],
+                    )
+                )
+
+        # Try to supplement missing details from the Google Sheet when
+        # Shopify didn't return them
         if not customer_name or not phone or not address:
             try:
                 sheet_data = await asyncio.to_thread(
