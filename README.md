@@ -1,14 +1,18 @@
 # Delivery App Backend
 
 This repository contains a FastAPI service used to scan delivery orders and
-store them in a database. Order information is loaded from a Google Sheet
-when scans occur.
+store them in a database. Shopify is queried first and a Google Sheet can be
+used as a fallback when order details are incomplete.
 
 ## Environment variables
 
 The backend is configured entirely through environment variables:
 
 - `DATABASE_URL` – SQLAlchemy connection string for the database.
+- `IRRAKIDS_API_KEY` / `IRRAKIDS_PASSWORD` – Shopify credentials for the
+  *irrakids* store.
+- `IRRANOVA_API_KEY` / `IRRANOVA_PASSWORD` – Shopify credentials for the
+  *irranova* store.
 - `ADMIN_PASSWORD` – password for the admin interface (defaults to
   `admin123`).
 - `REDIS_URL` – optional Redis instance used for caching.
@@ -17,7 +21,8 @@ The backend is configured entirely through environment variables:
 - `GOOGLE_APPLICATION_CREDENTIALS` – optional path to the credentials file.
 
 Either `GOOGLE_CREDENTIALS_B64` or `GOOGLE_APPLICATION_CREDENTIALS` must be
-provided so the application can access the Google Sheet.
+provided for the Google Sheets fallback to work. If neither is set, Shopify data
+is used on its own.
 
 To create a credentials file from the encoded value you can run:
 
