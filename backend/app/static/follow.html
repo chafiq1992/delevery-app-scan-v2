@@ -48,6 +48,11 @@
     .tag-oscario{background:#40e0d0;color:#333}
     .tag-sand{background:#ffcc80;color:#333}
     .tag-ch{background:#ffab91;color:#333}
+    .status-chip{padding:0.1rem 0.4rem;border-radius:4px;color:#fff;font-size:0.8rem}
+    .status-delivered{background:#4caf50}
+    .status-cancelled{background:#f44336}
+    .status-refusee{background:#ff9800}
+    .status-pending{background:#2196f3}
     .filters{position:sticky;top:3.5rem;background:var(--bg);padding-bottom:0.5rem;z-index:100}
     #orders .filters{top:6.5rem}
     #driverFilter{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;width:100%}
@@ -57,6 +62,7 @@
     .driver-log .log-time{color:#666}
     .done-btn{margin-top:0.5rem;padding:0.6rem;border:none;border-radius:6px;background:#4caf50;color:#fff;font-size:1rem;width:100%;cursor:pointer}
     .undone-btn{margin-top:0.5rem;padding:0.6rem;border:none;border-radius:6px;background:#f44336;color:#fff;font-size:1rem;width:100%;cursor:pointer}
+    .return-btn{margin-top:0.3rem;padding:0.4rem;border:none;border-radius:6px;background:#ffeb3b;color:#333;font-size:0.9rem;cursor:pointer}
     .paid-status{color:#2e7d32}
     .pending-status{color:#f57c00}
     .payout-card{background:var(--card);border-radius:8px;padding:1rem;margin-bottom:1rem;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
@@ -81,6 +87,7 @@
     <button data-tab="done" onclick="showTab('done')">Done</button>
     <button data-tab="archive" onclick="showTab('archive')">Archive</button>
     <button data-tab="payouts" onclick="showTab('payouts')">Payouts</button>
+    <button data-tab="notes" onclick="showTab('notes')">Delivery Notes</button>
   </div>
   <div class="filters" id="driverFilterContainer">
     <div id="driverFilter"></div>
@@ -96,6 +103,22 @@
   </div>
   <div id="archive" class="tab-content"></div>
   <div id="payouts" class="tab-content"></div>
+  <div id="notes" class="tab-content">
+    <div class="filters">
+      <select id="notePeriod" onchange="applyNotesPeriod()" style="margin-bottom:0.5rem">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="all">All time</option>
+      </select>
+      <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem">
+        <input type="date" id="noteStart">
+        <span>to</span>
+        <input type="date" id="noteEnd">
+        <button onclick="applyNotesRange()">Apply</button>
+      </div>
+    </div>
+    <div id="notesContainer"></div>
+  </div>
   <div id="done" class="tab-content"></div>
 <script>
 const API=window.location.origin.replace(/\/$/,'');
@@ -118,10 +141,11 @@ function showTab(t){
   if(t==='orders') renderOrders();
   if(t==='archive') renderArchive();
   if(t==='done') renderDone();
+  if(t==='notes') renderNotes();
 }
 
 let ordersData={},archiveData={},driversCache=[];
-let doneData={},driverFilterVal='',recentUpdateKey=null;
+let notesData=[],doneData={},driverFilterVal='',recentUpdateKey=null;
 
 async function loadAll(){
   try{
@@ -133,6 +157,7 @@ async function loadAll(){
   await loadOrders(driversCache);
   await loadArchive(driversCache);
   loadPayouts(driversCache);
+  await loadNotes(driversCache);
   populateStatusFilter();
   loadDone();
   populateDriverFilter();
@@ -207,6 +232,87 @@ function populateStatusFilter(){
     const o=document.createElement('option');
     o.value=s; o.textContent=s; sel.appendChild(o);
   });
+}
+
+async function loadNotes(drivers){
+  notesData={};
+  for(const d of drivers){
+    try{
+      const list=await apiGet(`/admin/notes?driver=${d}`);
+      for(const n of list){
+        const detail=await apiGet(`/notes/${n.id}?driver=${d}`);
+        n.items=n.items.map(it=>{
+          const extra=detail.items.find(e=>e.orderName===it.orderName)||{};
+          return {...it,cashAmount:extra.cashAmount||0};
+        });
+      }
+      notesData[d]=list;
+    }catch(e){
+      alert(`Error loading notes for ${d}: `+e);
+      notesData[d]=[];
+    }
+  }
+  renderNotes();
+}
+
+function renderNotes(){
+  const container=document.getElementById('notesContainer');
+  if(!container) return;
+  container.innerHTML='';
+  const colors=['#ff5722','#4caf50','#03a9f4','#ff9800','#e91e63','#009688'];
+  const period=document.getElementById('notePeriod').value;
+  let start=document.getElementById('noteStart').value;
+  let end=document.getElementById('noteEnd').value;
+  if(period!=='all' && !start){
+    const days=parseInt(period)||7;
+    const dt=new Date();
+    dt.setDate(dt.getDate()-days);
+    start=dt.toISOString().slice(0,10);
+  }
+  if(period!=='all' && !end){
+    end=new Date().toISOString().slice(0,10);
+  }
+  const startDt=start?new Date(start):null;
+  const endDt=end?new Date(end+'T23:59:59'):null;
+  for(const [d,notes] of Object.entries(notesData)){
+    if(driverFilterVal && d!==driverFilterVal) continue;
+    const idx=driversCache.indexOf(d);
+    const color=colors[idx%colors.length];
+    let html=`<div class="driver-section"><h2 style="color:${color}">${d.toUpperCase()}</h2>`;
+    notes.filter(n=>{
+      const dt=new Date(n.createdAt.replace(' ','T'));
+      return (!startDt||dt>=startDt)&&(!endDt||dt<=endDt);
+    }).forEach(n=>{
+      html+=`<details class="order-card"><summary style="background:${color};color:#fff;padding:0.4rem;border-radius:4px">DN #${n.id} – ${d} – Created ${n.createdAt}</summary><div style="padding:0.5rem">`;
+      html+=`<table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead><tr><th>Order</th><th>Status</th><th>COD</th><th>Action</th></tr></thead><tbody>`;
+      n.items.forEach(it=>{
+        const cls=it.status==='Livré'?'status-delivered':(it.status==='Returned'?'status-cancelled':(it.status==='Annulé'?'status-cancelled':(it.status==='Refusé'?'status-refusee':'status-pending')));
+        const btn=['Cancelled','Annulé','Refusé','Returned'].includes(it.status)?`<button class="return-btn" onclick="acceptReturn('${d}','${it.orderName}',this)">♻️ Accept Return</button>`:'';
+        html+=`<tr><td>${it.orderName}</td><td><span class="status-chip ${cls}">${it.status}</span></td><td>${it.cashAmount}</td><td>${btn}</td></tr>`;
+      });
+      html+=`</tbody></table></div></details>`;
+    });
+    html+='</div>';
+    container.innerHTML+=html;
+  }
+}
+
+function applyNotesPeriod(){
+  document.getElementById('noteStart').value='';
+  document.getElementById('noteEnd').value='';
+  renderNotes();
+}
+
+function applyNotesRange(){
+  document.getElementById('notePeriod').value='';
+  renderNotes();
+}
+
+function acceptReturn(driver,order,btn){
+  btn.disabled=true;
+  apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:'Returned'})
+    .then(()=>{btn.closest('tr').style.opacity='0.5';loadOrders(driversCache);loadArchive(driversCache);loadNotes(driversCache);})
+    .catch(e=>{alert('Error: '+e);btn.disabled=false;});
 }
 
 
@@ -418,6 +524,7 @@ function applyDriverFilter(){
   renderOrders();
   renderArchive();
   renderDone();
+  renderNotes();
 }
 
 function getCommLog(key){try{return JSON.parse(localStorage.getItem('log_'+key)||'{}');}catch(e){return {};}}
