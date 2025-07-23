@@ -81,6 +81,12 @@ COMPLETED_STATUSES = [
     "Livré",
     "Deleted",
 ]
+ARCHIVE_STATUSES = [
+    "Livré",
+    "Annulé",
+    "Refusé",
+    "Returned",
+]
 NORMAL_DELIVERY_FEE = 20
 EXCHANGE_DELIVERY_FEE = 10
 
@@ -174,6 +180,7 @@ orders_cache = TTLCache(maxsize=8, ttl=60)
 payouts_cache = TTLCache(maxsize=8, ttl=60)
 archive_cache = TTLCache(maxsize=8, ttl=60)
 followups_cache = TTLCache(maxsize=8, ttl=60)
+all_orders_cache = TTLCache(maxsize=8, ttl=60)
 
 
 async def cache_get(namespace: str, key: str):
@@ -185,6 +192,7 @@ async def cache_get(namespace: str, key: str):
         "payouts": payouts_cache,
         "archive": archive_cache,
         "followups": followups_cache,
+        "orders_all": all_orders_cache,
     }[namespace]
     return cache.get(key)
 
@@ -199,6 +207,7 @@ async def cache_set(namespace: str, key: str, value, ttl: int = 60):
             "payouts": payouts_cache,
             "archive": archive_cache,
             "followups": followups_cache,
+            "orders_all": all_orders_cache,
         }[namespace]
         cache[key] = value
 
@@ -212,6 +221,7 @@ async def cache_delete(namespace: str, key: str):
             "payouts": payouts_cache,
             "archive": archive_cache,
             "followups": followups_cache,
+            "orders_all": all_orders_cache,
         }[namespace]
         cache.pop(key, None)
 
@@ -926,7 +936,7 @@ async def list_archived_orders(driver: str = Query(...)):
             .outerjoin(DeliveryNote, DeliveryNote.id == DeliveryNoteItem.note_id)
             .where(
                 Order.driver_id == driver,
-                Order.delivery_status.in_(COMPLETED_STATUSES),
+                Order.delivery_status.in_(ARCHIVE_STATUSES),
                 or_(
                     DeliveryNote.status == "approved",
                     DeliveryNote.id == None,
@@ -962,6 +972,57 @@ async def list_archived_orders(driver: str = Query(...)):
 
     await cache_set("archive", driver, archived)
     return archived
+
+
+@app.get("/orders/all", tags=["orders"])
+async def list_all_orders(driver: str = Query(...)):
+    cached = await cache_get("orders_all", driver)
+    if cached is not None:
+        return cached
+
+    async for session in get_session():
+        await get_driver(session, driver)
+        result = await session.execute(
+            select(Order)
+            .outerjoin(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
+            .outerjoin(DeliveryNote, DeliveryNote.id == DeliveryNoteItem.note_id)
+            .where(
+                Order.driver_id == driver,
+                Order.delivery_status != "Deleted",
+                or_(
+                    DeliveryNote.status == "approved",
+                    DeliveryNote.id == None,
+                ),
+            )
+        )
+        rows = result.scalars().all()
+
+        all_orders = []
+        for o in rows:
+            all_orders.append(
+                {
+                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "orderName": o.order_name,
+                    "customerName": o.customer_name,
+                    "customerPhone": o.customer_phone,
+                    "address": o.address,
+                    "tags": o.tags,
+                    "deliveryStatus": o.delivery_status or "Dispatched",
+                    "notes": o.notes,
+                    "driverNotes": o.driver_notes,
+                    "scheduledTime": o.scheduled_time,
+                    "scanDate": o.scan_date,
+                    "cashAmount": o.cash_amount or 0,
+                    "driverFee": o.driver_fee or 0,
+                    "payoutId": o.payout_id,
+                    "statusLog": o.status_log,
+                    "commLog": o.comm_log,
+                    "followLog": o.follow_log,
+                }
+            )
+
+    await cache_set("orders_all", driver, all_orders)
+    return all_orders
 
 
 @app.get("/orders/followups", tags=["orders"])

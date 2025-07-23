@@ -158,12 +158,12 @@ async function loadOrders(drivers){
   const changed=[];
   purgeExpiredDone();
   const results=await Promise.all(drivers.map(d=>
-    apiGet(`/orders?driver=${d}`)
+    apiGet(`/orders/all?driver=${d}`)
       .then(data=>({driver:d,data}))
       .catch(e=>{alert(`Error loading orders for ${d}: `+e);return {driver:d,data:[]};})
   ));
   results.forEach(r=>{
-    const filtered=r.data.filter(o=>!doneData[`${r.driver}_${o.orderName}`]);
+    const filtered=r.data;
     if(recentUpdateKey){
       filtered.sort((a,b)=>{
         const ka=`${r.driver}_${a.orderName}`;
