@@ -369,7 +369,7 @@
      2.  Globals copied from old code
      ────────────────────────────────────────────────────────────*/
   let scanner, orders = [], archive = [], payouts = [], notes = [];
-  const deliveryStatuses = ['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
+  const deliveryStatuses = ['Dispatched','Livré','Paid','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
   const formatMoney = n => (parseFloat(n) || 0).toFixed(2).replace('.', ',');
 
   function animateValue(id,start,end,duration){
@@ -391,7 +391,7 @@
 
   function buildOrdersChart() {
     if(!orders.length) return;
-    const delivered = orders.filter(o => o.deliveryStatus === 'Livré').length;
+    const delivered = orders.filter(o => ['Livré','Paid'].includes(o.deliveryStatus)).length;
     const failed = orders.filter(o => ['Annulé','Refusé','Returned'].includes(o.deliveryStatus)).length;
     const dispatched = orders.filter(o => o.deliveryStatus === 'Dispatched').length;
     const inprog = orders.length - delivered - failed - dispatched;
@@ -620,7 +620,7 @@
   }
 
   function displayOrders(ol){
-    orders = (ol || []).filter(o=>!['Livré','Annulé','Refusé','Returned','Canceled','Cancelled'].includes(o.deliveryStatus));
+    orders = (ol || []).filter(o=>!['Livré','Paid','Annulé','Refusé','Returned','Canceled','Cancelled'].includes(o.deliveryStatus));
     const c = document.getElementById('ordersContainer');
     if(!orders.length){ c.innerHTML='<div class="no-orders">📭 No active orders found.</div>'; return; }
 
@@ -651,7 +651,7 @@
       const tc = getPrimaryTag(o.tags);
       const isExchange = tc==='ch' || (o.tags||'').toLowerCase().includes('ch');
       const fee = isExchange ? 10 : 20;
-      const delivered = o.deliveryStatus === 'Livré';
+      const delivered = ['Livré','Paid'].includes(o.deliveryStatus);
       const waMsg = encodeURIComponent(
         `Salam/Bonjour ${o.customerName||''}, votre livreur ${driver_id} vous contacte. ` +
         `J'ai votre commande numéro ${o.orderName} d'un total de ${o.cashAmount||0} DH. ` +

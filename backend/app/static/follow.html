@@ -50,6 +50,7 @@
     .tag-ch{background:#ffab91;color:#333}
     .status-chip{padding:0.1rem 0.4rem;border-radius:4px;color:#fff;font-size:0.8rem}
     .status-delivered{background:#4caf50}
+    .status-paid{background:#1976d2}
     .status-cancelled{background:#f44336}
     .status-refusee{background:#ff9800}
     .status-pending{background:#2196f3}
@@ -127,8 +128,8 @@ const handleResp=async r=>{if(!r.ok){const t=await r.text();throw t||r.status;}r
 const apiGet=p=>fetch(API+p).then(handleResp);
 const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(handleResp);
 
-const deliveryStatuses=['Dispatched','Livré','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
-const statusColors={'Livré':'#4caf50','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336','En cours':'#ffeb3b'};
+const deliveryStatuses=['Dispatched','Livré','Paid','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
+const statusColors={'Livré':'#4caf50','Paid':'#1976d2','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336','En cours':'#ffeb3b'};
 
 let prevState={};
 
@@ -286,7 +287,7 @@ function renderNotes(){
       html+=`<details class="order-card"><summary style="background:${color};color:#fff;padding:0.4rem;border-radius:4px">DN #${n.id} – ${d} – Created ${n.createdAt}</summary><div style="padding:0.5rem">`;
       html+=`<table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead><tr><th>Order</th><th>Status</th><th>COD</th><th>Action</th></tr></thead><tbody>`;
       n.items.forEach(it=>{
-        const cls=it.status==='Livré'?'status-delivered':(it.status==='Returned'?'status-cancelled':(it.status==='Annulé'?'status-cancelled':(it.status==='Refusé'?'status-refusee':'status-pending')));
+        const cls=it.status==='Paid'?'status-paid':(it.status==='Livré'?'status-delivered':(it.status==='Returned'?'status-cancelled':(it.status==='Annulé'?'status-cancelled':(it.status==='Refusé'?'status-refusee':'status-pending'))));
         const btn=['Cancelled','Annulé','Refusé','Returned'].includes(it.status)?`<button class="return-btn" onclick="acceptReturn('${d}','${it.orderName}',this)">♻️ Accept Return</button>`:'';
         html+=`<tr><td>${it.orderName}</td><td><span class="status-chip ${cls}">${it.status}</span></td><td>${it.cashAmount}</td><td>${btn}</td></tr>`;
       });
