@@ -54,6 +54,7 @@
     .status-cancelled{background:#f44336}
     .status-refusee{background:#ff9800}
     .status-pending{background:#2196f3}
+    .paid-badge{background:#4caf50;color:#fff;padding:0.1rem 0.4rem;border-radius:4px;font-size:0.8rem;margin-left:0.3rem}
     .filters{position:sticky;top:3.5rem;background:var(--bg);padding-bottom:0.5rem;z-index:100}
     #orders .filters{top:6.5rem}
     #driverFilter{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;width:100%}
@@ -289,7 +290,8 @@ function renderNotes(){
       n.items.forEach(it=>{
         const cls=it.status==='Paid'?'status-paid':(it.status==='Livré'?'status-delivered':(it.status==='Returned'?'status-cancelled':(it.status==='Annulé'?'status-cancelled':(it.status==='Refusé'?'status-refusee':'status-pending'))));
         const btn=['Cancelled','Annulé','Refusé','Returned'].includes(it.status)?`<button class="return-btn" onclick="acceptReturn('${d}','${it.orderName}',this)">♻️ Accept Return</button>`:'';
-        html+=`<tr><td>${it.orderName}</td><td><span class="status-chip ${cls}">${it.status}</span></td><td>${it.cashAmount}</td><td>${btn}</td></tr>`;
+        const label=it.status==='Paid'?'Paid DH ✓':it.status;
+        html+=`<tr><td>${it.orderName}</td><td><span class="status-chip ${cls}">${label}</span></td><td>${it.cashAmount}</td><td>${btn}</td></tr>`;
       });
       html+=`</tbody></table></div></details>`;
     });
@@ -341,7 +343,7 @@ function renderSection(dataObj,container,includeInputs,showDone,showUndone){
       const border=statusColors[o.deliveryStatus]||'#004aad';
       const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
       html+=`<div id="card-${key}" class="order-card ${o.urgent?'followup':''}" style="border-left-color:${border}">
-        <div class="order-header"><span style="font-size:1.2rem;font-weight:bold">${o.orderName}</span>${o.urgent?'<span class="urgent-icon">🔔</span>':''}<span style="font-size:0.9rem">${o.deliveryStatus}</span></div>
+        <div class="order-header"><span style="font-size:1.2rem;font-weight:bold">${o.orderName}</span>${o.urgent?'<span class="urgent-icon">🔔</span>':''}${o.deliveryStatus==='Paid'?'<span class="paid-badge">Paid DH ✓</span>':`<span style="font-size:0.9rem">${o.deliveryStatus}</span>`}</div>
         <div>${o.customerName||''}</div>
         <div>${o.customerPhone?`📞 ${o.customerPhone} <a href="tel:${o.customerPhone}" onclick="return recordCall('${key}')">📞</a> ${waUrl?`<a href="${waUrl}" target="_blank" onclick="return recordWhatsapp('${key}')">💬</a>`:''}`:''}</div>
         <div>${o.address||''}</div>
@@ -413,7 +415,7 @@ function renderArchive(){
         const border=statusColors[o.deliveryStatus]||'#004aad';
         const waUrl=o.customerPhone?`https://wa.me/${o.customerPhone}`:'';
         html+=`<div id="card-${key}" class="order-card" style="border-left-color:${border}">`+
-          `<div class="order-header"><span style="font-size:1.2rem;font-weight:bold">${o.orderName}</span><span style="font-size:0.9rem">${o.deliveryStatus}</span></div>`+
+          `<div class="order-header"><span style="font-size:1.2rem;font-weight:bold">${o.orderName}</span>${o.deliveryStatus==='Paid'?'<span class="paid-badge">Paid DH ✓</span>':'<span style="font-size:0.9rem">'+o.deliveryStatus+'</span>'}</div>`+
           `<div>${o.customerName||''}</div>`+
           `<div>${o.customerPhone?`📞 ${o.customerPhone}`:''}</div>`+
           `<div>${o.address||''}</div>`+

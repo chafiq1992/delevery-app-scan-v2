@@ -1349,6 +1349,53 @@ async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
                 o.delivery_status = "Paid"
                 ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 o.status_log = ((o.status_log or "") + f" | Paid @ {ts}").strip(" |")
+                await manager.broadcast(
+                    {
+                        "type": "status_update",
+                        "driver": driver,
+                        "order": o.order_name,
+                        "status": "Paid",
+                    }
+                )
+
+        await session.commit()
+
+        await cache_delete("payouts", driver)
+        await cache_delete("orders", driver)
+        return {"success": True}
+
+
+@app.post("/payout/mark-unpaid/{payout_id}", tags=["payouts"])
+async def mark_payout_unpaid(payout_id: str, driver: str = Query(...)):
+    async for session in get_session():
+        await get_driver(session, driver)
+        payout = await session.scalar(
+            select(Payout).where(
+                Payout.driver_id == driver, Payout.payout_id == payout_id
+            )
+        )
+        if not payout:
+            raise HTTPException(status_code=404, detail="Payout not found")
+
+        payout.status = "pending"
+        payout.date_paid = None
+
+        result = await session.execute(
+            select(Order).where(Order.payout_id == payout_id)
+        )
+        for o in result.scalars():
+            if o.delivery_status == "Paid":
+                o.delivery_status = "Livré"
+                ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                o.status_log = ((o.status_log or "") + f" | Livré @ {ts}").strip(" |")
+                await manager.broadcast(
+                    {
+                        "type": "status_update",
+                        "driver": driver,
+                        "order": o.order_name,
+                        "status": "Livré",
+                    }
+                )
 
         await session.commit()
 
