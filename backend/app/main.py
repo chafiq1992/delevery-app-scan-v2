@@ -1547,26 +1547,6 @@ async def _compute_stats(
     }
 
 
-async def get_tag_summary(session: AsyncSession) -> dict[str, dict[str, int]]:
-    """Return count of primary tags per store."""
-    result = await session.execute(select(Order.tags, Order.store))
-    summary: dict[str, dict[str, int]] = {}
-    for tags, store in result.all():
-        tag = get_primary_display_tag(tags)
-        if not tag:
-            continue
-        store_name = store or ""
-        summary.setdefault(tag, {})
-        summary[tag][store_name] = summary[tag].get(store_name, 0) + 1
-    return summary
-
-
-@app.get("/tag-summary", tags=["stats"])
-async def tag_summary():
-    async for session in get_session():
-        return await get_tag_summary(session)
-
-
 @app.get("/stats", tags=["stats"])
 async def get_stats(
     driver: str = Query(...),
