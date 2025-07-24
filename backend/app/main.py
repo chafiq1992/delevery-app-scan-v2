@@ -85,6 +85,7 @@ SHOPIFY_STORES = [
 DELIVERY_STATUSES = [
     "Dispatched",
     "Livré",
+    "Paid",
     "En cours",
     "Pas de réponse 1",
     "Pas de réponse 2",
@@ -97,10 +98,12 @@ DELIVERY_STATUSES = [
 ]
 COMPLETED_STATUSES = [
     "Livré",
+    "Paid",
     "Deleted",
 ]
 ARCHIVE_STATUSES = [
     "Livré",
+    "Paid",
     "Annulé",
     "Refusé",
     "Returned",
@@ -1337,6 +1340,16 @@ async def mark_payout_paid(payout_id: str, driver: str = Query(...)):
 
         payout.status = "paid"
         payout.date_paid = dt.datetime.utcnow()
+
+        result = await session.execute(
+            select(Order).where(Order.payout_id == payout_id)
+        )
+        for o in result.scalars():
+            if o.delivery_status == "Livré":
+                o.delivery_status = "Paid"
+                ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                o.status_log = ((o.status_log or "") + f" | Paid @ {ts}").strip(" |")
+
         await session.commit()
 
         await cache_delete("payouts", driver)
@@ -1436,7 +1449,7 @@ async def _compute_stats(
         status = o.delivery_status
         cash = o.cash_amount or 0
         fee = o.driver_fee or 0
-        if status == "Livré":
+        if status in ("Livré", "Paid"):
             delivered += 1
             collect += cash
             fees += fee
@@ -1515,7 +1528,8 @@ async def admin_trends(
         counts: dict[dt.date, int] = {}
         for driver in drivers.keys():
             q = select(Order).where(
-                Order.driver_id == driver, Order.delivery_status == "Livré"
+                Order.driver_id == driver,
+                Order.delivery_status.in_(["Livré", "Paid"]),
             )
             if start_date:
                 q = q.where(Order.scan_date >= start_date.strftime("%Y-%m-%d"))
@@ -1723,7 +1737,7 @@ async def admin_list_notes(driver: str | None = Query(None)):
                 if not o:
                     continue
                 items.append({"orderName": o.order_name, "status": o.delivery_status})
-                if o.delivery_status == "Livré":
+                if o.delivery_status in ("Livré", "Paid"):
                     summary["delivered"] += 1
                 elif o.delivery_status in ("Annulé", "Refusé"):
                     summary["cancelled"] += 1
