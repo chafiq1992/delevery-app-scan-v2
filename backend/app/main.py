@@ -627,6 +627,37 @@ async def remove_from_payout(
     await session.flush()
 
 
+async def sync_order_paid_status(session: AsyncSession, order: Order) -> None:
+    """Ensure delivery status reflects paid payouts."""
+    if order.delivery_status == "Paid":
+        return
+
+    payout = None
+    if order.payout_id:
+        payout = await session.scalar(
+            select(Payout).where(Payout.payout_id == order.payout_id)
+        )
+    if not payout:
+        payout = await session.scalar(
+            select(Payout)
+            .where(
+                Payout.status == "paid",
+                Payout.driver_id == order.driver_id,
+                Payout.orders.ilike(f"%{order.order_name}%"),
+            )
+        )
+        if payout:
+            order.payout_id = order.payout_id or payout.payout_id
+
+    if payout and payout.status == "paid":
+        order.delivery_status = "Paid"
+        ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        order.status_log = ((order.status_log or "") + f" | Paid @ {ts}").strip(
+            " |"
+        )
+        await session.flush()
+
+
 # ───────────────────────────────────────────────────────────────
 # FastAPI ROUTES
 # ───────────────────────────────────────────────────────────────
@@ -1783,6 +1814,7 @@ async def admin_list_notes(driver: str | None = Query(None)):
                 o = await session.get(Order, it.order_id)
                 if not o:
                     continue
+                await sync_order_paid_status(session, o)
                 items.append({"orderName": o.order_name, "status": o.delivery_status})
                 if o.delivery_status in ("Livré", "Paid"):
                     summary["delivered"] += 1
@@ -1800,6 +1832,7 @@ async def admin_list_notes(driver: str | None = Query(None)):
                     "items": items,
                 }
             )
+        await session.commit()
         return notes
 
 
