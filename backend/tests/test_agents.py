@@ -71,3 +71,18 @@ def test_drivers_all_query():
     assert resp.status_code == 200
     data = resp.json()
     assert 'd1' in data and 'd2' in data
+
+
+def test_create_agent_without_password_fails():
+    app_main, app_db, app_models, client = setup_app()
+    resp = client.post('/admin/agents', json={'username': 'nopass'})
+    assert resp.status_code == 400
+
+
+def test_update_agent_without_password():
+    app_main, app_db, app_models, client = setup_app()
+    asyncio.run(create_agent(app_db, app_models, username='editme'))
+    resp = client.put('/admin/agents/editme', json={'username':'editme','drivers': ['d1', 'd2']})
+    assert resp.status_code == 200
+
+

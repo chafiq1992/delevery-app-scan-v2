@@ -173,7 +173,7 @@ class VerificationUpdate(BaseModel):
 
 class AgentIn(BaseModel):
     username: str
-    password: str
+    password: str | None = None
     drivers: List[str] | None = None
 
 
@@ -228,7 +228,9 @@ async def load_drivers(session):
 
 
 async def load_agent(session, username: str) -> Agent | None:
-    result = await session.execute(select(Agent).where(Agent.username == username))
+    result = await session.execute(
+        select(Agent).options(selectinload(Agent.drivers)).where(Agent.username == username)
+    )
     return result.scalar_one_or_none()
 
 
@@ -1706,6 +1708,8 @@ async def admin_create_agent(agent: AgentIn):
         existing = await load_agent(session, agent.username)
         if existing:
             raise HTTPException(status_code=400, detail="Agent exists")
+        if not agent.password:
+            raise HTTPException(status_code=400, detail="Password required")
         a = Agent(username=agent.username, password=agent.password)
         if agent.drivers:
             drivers = await session.execute(select(Driver).where(Driver.id.in_(agent.drivers)))
@@ -1721,7 +1725,8 @@ async def admin_update_agent(username: str, data: AgentIn):
         agent = await load_agent(session, username)
         if not agent:
             raise HTTPException(status_code=404, detail="Not found")
-        agent.password = data.password
+        if data.password is not None:
+            agent.password = data.password
         if data.drivers is not None:
             drivers = await session.execute(select(Driver).where(Driver.id.in_(data.drivers)))
             agent.drivers = list(drivers.scalars())

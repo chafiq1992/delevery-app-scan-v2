@@ -572,7 +572,10 @@ document.getElementById('drawerCancel').addEventListener('click',closeDrawer);
 async function saveAssignments(){
   if(!currentAgent)return;
   if(editDrivers.size===0&&editMerchants.size===0){if(!confirm('This agent will have no data. Continue?'))return;}
-  await fetch(`/admin/agents/${encodeURIComponent(currentAgent)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({drivers:Array.from(editDrivers)})});
+  const pw=document.getElementById('drawerPassword').value.trim();
+  const payload={drivers:Array.from(editDrivers)};
+  if(pw)payload.password=pw;
+  await fetch(`/admin/agents/${encodeURIComponent(currentAgent)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   for(const m of merchantsData){
     const assigned=editMerchants.has(m.id);const agents=new Set(m.agents);
     if(assigned)agents.add(currentAgent);else agents.delete(currentAgent);
