@@ -522,6 +522,13 @@ async def scan(
 
         if await order_exists(session, driver, order_number):
             existing = await get_order_row(session, driver, order_number)
+            if existing.return_pending and existing.delivery_status in ("Returned", "Annulé", "Refusé"):
+                return ScanResult(
+                    result="⚠️ Awaiting agent confirmation",
+                    order=order_number,
+                    tag=get_primary_display_tag(existing.tags),
+                    deliveryStatus="Pending Return",
+                )
             return ScanResult(
                 result="⚠️ Already scanned",
                 order=order_number,
@@ -855,6 +862,7 @@ async def list_archived_orders(driver: str = Query(...)):
             .where(
                 Order.driver_id == driver,
                 Order.delivery_status.in_(ARCHIVE_STATUSES),
+                or_(Order.return_pending == None, Order.return_pending == 0),
                 or_(
                     DeliveryNote.status == "approved",
                     DeliveryNote.id == None,
@@ -976,6 +984,8 @@ async def update_order_status(
             order.status_log = (
                 (order.status_log or "") + f" | {payload.new_status} @ {ts}"
             ).strip(" |")
+            if payload.new_status in ("Returned", "Annulé", "Refusé"):
+                order.return_pending = 1
         if payload.note is not None:
             order.notes = payload.note
         if payload.driver_note is not None:
@@ -1032,6 +1042,41 @@ async def update_order_status(
                 "driver": driver,
                 "order": payload.order_name,
                 "status": payload.new_status,
+            }
+        )
+        return {"success": True}
+
+
+@app.post("/order/accept-return", tags=["orders"])
+async def accept_return(payload: ManualAdd, request: Request, driver: str = Query(...)):
+    async for session in get_session():
+        await get_driver(session, driver)
+        order = await get_order_row(session, driver, payload.order_name)
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        order.return_pending = 0
+        order.return_agent = request.cookies.get("agent") or "unknown"
+        order.return_time = dt.datetime.utcnow()
+        ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        order.follow_log = (
+            (order.follow_log or "")
+            + f"{ts} - Return accepted by {order.return_agent}\n"
+        ).lstrip()
+        order.status_log = (
+            (order.status_log or "")
+            + f" | return accepted {order.return_agent} @ {ts}"
+        ).strip(" |")
+
+        await session.commit()
+        await cache_delete("orders", driver)
+        await cache_delete("archive", driver)
+        await manager.broadcast(
+            {
+                "type": "status_update",
+                "driver": driver,
+                "order": payload.order_name,
+                "status": order.delivery_status,
             }
         )
         return {"success": True}
@@ -1245,7 +1290,7 @@ async def _compute_stats(
     result = await session.execute(q)
     rows = result.scalars().all()
 
-    total = delivered = returned = 0
+    total = delivered = returned = pending_ret = 0
     collect = fees = canceled_amount = 0.0
     for o in rows:
         sd = None
@@ -1270,14 +1315,18 @@ async def _compute_stats(
             collect += cash
             fees += fee
         elif status in ("Returned", "Annulé", "Refusé"):
-            returned += 1
-            canceled_amount += cash
+            if o.return_pending:
+                pending_ret += 1
+            else:
+                returned += 1
+                canceled_amount += cash
 
     rate = (delivered / total * 100) if total else 0
     return {
         "totalOrders": total,
         "delivered": delivered,
         "returned": returned,
+        "pendingReturns": pending_ret,
         "totalCollect": collect,
         "totalFees": fees,
         "deliveryRate": rate,

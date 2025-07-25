@@ -53,6 +53,9 @@ def parse_timestamp(val: str) -> dt.datetime:
 
 
 def serialize_order(order: Order) -> dict:
+    status = order.delivery_status or "Dispatched"
+    pending = bool(order.return_pending) and status in ("Returned", "Annulé", "Refusé")
+    display_status = "Pending Return" if pending else status
     return {
         "timestamp": order.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
         "orderName": order.order_name,
@@ -60,7 +63,7 @@ def serialize_order(order: Order) -> dict:
         "customerPhone": order.customer_phone,
         "address": order.address,
         "tags": order.tags,
-        "deliveryStatus": order.delivery_status or "Dispatched",
+        "deliveryStatus": display_status,
         "notes": order.notes,
         "driverNotes": order.driver_notes,
         "scheduledTime": order.scheduled_time,
@@ -71,6 +74,7 @@ def serialize_order(order: Order) -> dict:
         "statusLog": order.status_log,
         "commLog": order.comm_log,
         "followLog": order.follow_log,
+        "returnPending": pending,
     }
 
 

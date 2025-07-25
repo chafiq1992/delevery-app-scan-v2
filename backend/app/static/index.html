@@ -123,6 +123,7 @@
     .payout-period{font-size:1.2rem;font-weight:bold;color:#4caf50}
     .payout-status{padding:0.3rem 1rem;border-radius:20px;font-size:0.9rem;font-weight:600}
     .status-pending{background:#fff3e0;color:#f57c00}
+    .status-pending-return{background:#fff59d;color:#f57c00}
     .status-paid{background:#e8f5e8;color:#2e7d32}
     .payout-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin:1rem 0;padding:1rem;background:#f8faff;border-radius:8px}
     .payout-orders{margin-top:1rem}
@@ -1053,6 +1054,7 @@
         <div class="summary-grid">
           <div class="stat-card"><div class="stat-card-title">📦 Total Orders</div><div class="stat-card-value" id="stTotal">0</div></div>
           <div class="stat-card"><div class="stat-card-title">✅ Delivered</div><div class="stat-card-value" id="stDeliv">0</div></div>
+          <div class="stat-card"><div class="stat-card-title">⏳ Pending Return</div><div class="stat-card-value" id="stPendRet">0</div></div>
           <div class="stat-card"><div class="stat-card-title">❌ Returned</div><div class="stat-card-value" id="stRet">0</div></div>
           <div class="stat-card"><div class="stat-card-title">💰 Collected</div><div class="stat-card-value" id="stCash" data-suffix=" DH">0</div></div>
           <div class="stat-card"><div class="stat-card-title">📈 Fees Earned</div><div class="stat-card-value" id="stFees" data-suffix=" DH">0</div></div>
@@ -1062,6 +1064,7 @@
     document.getElementById('statsContainer').innerHTML = h;
     animateValue('stTotal',0,st.totalOrders,800);
     animateValue('stDeliv',0,st.delivered,800);
+    animateValue('stPendRet',0,st.pendingReturns||0,800);
     animateValue('stRet',0,st.returned,800);
     animateValue('stCash',0,parseFloat(st.totalCollect||0),800);
     animateValue('stFees',0,parseFloat(st.totalFees||0),800);
