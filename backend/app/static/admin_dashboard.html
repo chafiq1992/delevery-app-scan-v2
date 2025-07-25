@@ -12,6 +12,10 @@
     .tab.active{background:#2563eb;color:white;border-radius:0.5rem 0.5rem 0 0;}
     .tab-content{display:none;padding:1rem;}
     .tab-content.active{display:block;}
+    .chip{display:inline-block;font-size:0.75rem;padding:0.25rem 0.5rem;border-radius:9999px;margin:0.15rem;}
+    .chip-driver{background:#bfdbfe;color:#1e40af;}
+    .chip-merchant{background:#bbf7d0;color:#064e3b;}
+    #agentDrawer.show{transform:translateX(0);}
   </style>
 </head>
 <body class="text-gray-800 dark:bg-gray-900 dark:text-gray-200">
@@ -207,28 +211,61 @@
 
   <!-- Agents management tab -->
   <div id="agents" class="tab-content">
-    <h2 class="text-lg font-semibold mb-3">Agents</h2>
-    <div class="mb-3">
-      <input id="agentName" placeholder="Username" class="border p-1 rounded" />
-      <input id="agentPass" type="password" placeholder="Password" class="border p-1 rounded" />
-      <input id="agentDrivers" placeholder="Drivers (comma separated)" class="border p-1 rounded" />
-      <button onclick="addAgent()" class="px-3 py-1 bg-green-600 text-white rounded">Add</button>
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">Agents</h2>
+      <button id="newAgentBtn" class="px-3 py-1 bg-green-600 text-white rounded" onclick="openNewAgentModal()">+ New Agent</button>
     </div>
+    <div id="agentStats" class="flex gap-2 mb-3 text-sm"></div>
+    <input id="agentSearch" class="border p-1 rounded mb-3 w-full" placeholder="Search agents..." />
     <div class="grid md:grid-cols-3 gap-4">
       <div>
-        <h3 class="font-semibold mb-2">Agents</h3>
+        <h3 class="font-semibold text-base border-b mb-2">Agents</h3>
         <div id="agentsList" class="space-y-2"></div>
       </div>
       <div>
-        <h3 class="font-semibold mb-2">Drivers</h3>
-        <div id="driversAssign" class="space-y-1"></div>
+        <h3 class="font-semibold text-base border-b mb-2">Drivers</h3>
+        <input id="driverSearch" class="border p-1 rounded mb-2 w-full" placeholder="Search drivers..." />
+        <div id="driversAssign" class="flex flex-wrap gap-1 max-h-72 overflow-y-auto"></div>
       </div>
       <div>
-        <h3 class="font-semibold mb-2">Merchants</h3>
-        <div id="merchantsAssign" class="space-y-1"></div>
+        <h3 class="font-semibold text-base border-b mb-2">Merchants</h3>
+        <input id="merchantSearch" class="border p-1 rounded mb-2 w-full" placeholder="Search merchants..." />
+        <div id="merchantsAssign" class="flex flex-wrap gap-1 max-h-72 overflow-y-auto"></div>
       </div>
     </div>
-    <button class="mt-3 px-3 py-1 bg-blue-600 text-white rounded" onclick="saveAssignments()">Save</button>
+    <div id="toast" class="fixed bottom-4 right-4 bg-green-600 text-white px-3 py-2 rounded shadow hidden">Assignments updated ✓</div>
+
+    <div id="agentDrawer" class="fixed top-0 right-0 w-72 h-full bg-white shadow-lg transform translate-x-full transition-transform">
+      <div class="p-4">
+        <h3 id="drawerTitle" class="text-lg font-semibold mb-2"></h3>
+        <input id="drawerPassword" type="password" placeholder="New password" class="border p-1 rounded mb-2 w-full" />
+        <label class="block mb-2"><input type="checkbox" id="drawerAllDrivers" class="mr-1"/> All Drivers</label>
+        <label class="block mb-2"><input type="checkbox" id="drawerAllMerchants" class="mr-1"/> All Merchants</label>
+        <div class="mt-4 flex gap-2">
+          <button id="drawerSave" class="flex-1 bg-green-600 text-white px-3 py-1 rounded">Save</button>
+          <button id="drawerCancel" class="flex-1 bg-gray-300 px-3 py-1 rounded">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="newAgentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+      <div class="bg-white p-4 rounded shadow w-80">
+        <h3 class="text-lg font-semibold mb-2">New Agent</h3>
+        <input id="newAgentName" class="border p-1 rounded mb-2 w-full" placeholder="Username" />
+        <input id="newAgentPass" type="password" class="border p-1 rounded mb-2 w-full" placeholder="Password" />
+        <div class="mb-2">
+          <label class="block mb-1 font-semibold">Drivers</label>
+          <div id="newAgentDrivers" class="flex flex-wrap gap-1 max-h-32 overflow-y-auto border p-1 rounded"></div>
+        </div>
+        <div class="mb-2">
+          <label class="block mb-1 font-semibold">Merchants</label>
+          <div id="newAgentMerchants" class="flex flex-wrap gap-1 max-h-32 overflow-y-auto border p-1 rounded"></div>
+        </div>
+        <div class="flex justify-end gap-2 mt-2">
+          <button class="px-3 py-1 bg-green-600 text-white rounded" onclick="createAgent()">Save</button>
+          <button class="px-3 py-1 bg-gray-300 rounded" onclick="closeNewAgentModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Merchants management tab -->
@@ -452,49 +489,118 @@ async function loadPayouts(){
 
 // ----------------------- AGENTS -------------------------------
 let agentsData=[], driversData=[], merchantsData=[], currentAgent=null;
+let editDrivers=new Set(), editMerchants=new Set();
 async function loadAgentsTab(){
   agentsData=await fetch('/admin/agents').then(r=>r.json()).catch(()=>[]);
-  driversData=await fetch('/drivers').then(r=>r.json()).catch(()=>[]);
+  driversData=await fetch('/drivers?all=true').then(r=>r.json()).catch(()=>[]);
   merchantsData=await fetch('/admin/merchants').then(r=>r.json()).catch(()=>[]);
-  const list=document.getElementById('agentsList');
-  list.innerHTML=agentsData.map(a=>`<div class='p-2 border rounded cursor-pointer hover:bg-gray-100' onclick="selectAgent('${a.username}')">${a.username}</div>`).join('');
+  renderAgentCards();
+  updateStats();
   document.getElementById('driversAssign').innerHTML='';
   document.getElementById('merchantsAssign').innerHTML='';
   currentAgent=null;
 }
 
-function selectAgent(name){
-  currentAgent=name;
-  document.querySelectorAll('#agentsList div').forEach(d=>{d.classList.toggle('bg-blue-100',d.textContent===name);});
-  const agent=agentsData.find(a=>a.username===name)||{drivers:[]};
-  const dList=document.getElementById('driversAssign');
-  dList.innerHTML=driversData.map(d=>`<label class='block'><input type='checkbox' value='${d}' ${agent.drivers.includes(d)?'checked':''}> ${d}</label>`).join('');
-  const mList=document.getElementById('merchantsAssign');
-  mList.innerHTML=merchantsData.map(m=>`<label class='block'><input type='checkbox' data-id='${m.id}' ${m.agents.includes(name)?'checked':''}> ${m.name}</label>`).join('');
+function updateStats(){
+  const active=agentsData.length;
+  const assigned=new Set();
+  agentsData.forEach(a=>a.drivers.forEach(d=>assigned.add(d)));
+  const unassignedDrivers=driversData.filter(d=>!assigned.has(d));
+  const unassignedMerchants=merchantsData.filter(m=>m.agents.length===0);
+  let html=`<span class="bg-blue-600 text-white px-2 py-1 rounded">Active ${active}</span>`;
+  if(unassignedDrivers.length||unassignedMerchants.length){html+=` <span class="bg-yellow-500 text-white px-2 py-1 rounded">Unassigned</span>`;}
+  document.getElementById('agentStats').innerHTML=html;
 }
+
+function renderAgentCards(){
+  const list=document.getElementById('agentsList');
+  const q=document.getElementById('agentSearch').value.toLowerCase();
+  const items=agentsData.filter(a=>a.username.toLowerCase().includes(q));
+  if(!items.length){list.innerHTML='<div class="text-gray-400">No agents yet</div>';return;}
+  list.innerHTML=items.map(a=>{
+    const initials=a.username.slice(0,2).toUpperCase();
+    const driverChips=a.drivers.length===driversData.length?`<span class="chip chip-driver">All Drivers</span>`:a.drivers.map(d=>`<span class="chip chip-driver">${d}</span>`).join('');
+    const merchAssigned=merchantsData.filter(m=>m.agents.includes(a.username)).map(m=>m.name);
+    const merchChips=merchAssigned.length===merchantsData.length?`<span class="chip chip-merchant">All Merchants</span>`:merchAssigned.map(m=>`<span class="chip chip-merchant">${m}</span>`).join('');
+    return `<div class="p-2 bg-white rounded shadow hover:shadow-md flex justify-between items-start"><div><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center font-semibold">${initials}</div><span class="font-bold text-lg">${a.username}</span><span class="text-xs bg-gray-200 px-1 rounded">Agent</span></div><div class="mt-1 flex flex-wrap">${driverChips}${merchChips}</div></div><button class="text-blue-600" onclick="openDrawer('${a.username}')">✏️</button></div>`;
+  }).join('');
+}
+
+function openDrawer(name){
+  currentAgent=name;
+  const agent=agentsData.find(a=>a.username===name);
+  editDrivers=new Set(agent.drivers);
+  editMerchants=new Set(merchantsData.filter(m=>m.agents.includes(name)).map(m=>m.id));
+  document.getElementById('agentDrawer').classList.add('show');
+  document.getElementById('drawerTitle').textContent=name;
+  document.getElementById('drawerPassword').value='';
+  document.getElementById('drawerAllDrivers').checked=editDrivers.size===driversData.length;
+  document.getElementById('drawerAllMerchants').checked=editMerchants.size===merchantsData.length;
+  renderAssignLists();
+}
+
+function closeDrawer(){document.getElementById('agentDrawer').classList.remove('show');currentAgent=null;}
+
+function renderAssignLists(){renderDrivers();renderMerchants();}
+
+function renderDrivers(){
+  const term=document.getElementById('driverSearch').value.toLowerCase();
+  const list=document.getElementById('driversAssign');
+  list.innerHTML=driversData.filter(d=>d.toLowerCase().includes(term)).map(d=>{
+    const active=editDrivers.has(d)?'bg-blue-500 text-white':'bg-gray-200';
+    return `<span class="chip ${active} cursor-pointer" onclick="toggleDriver('${d}')">${d}</span>`;
+  }).join('');
+}
+
+function renderMerchants(){
+  const term=document.getElementById('merchantSearch').value.toLowerCase();
+  const list=document.getElementById('merchantsAssign');
+  list.innerHTML=merchantsData.filter(m=>m.name.toLowerCase().includes(term)).map(m=>{
+    const active=editMerchants.has(m.id)?'bg-green-500 text-white':'bg-gray-200';
+    return `<span class="chip ${active} cursor-pointer" onclick="toggleMerchant(${m.id})">${m.name}</span>`;
+  }).join('');
+}
+
+function toggleDriver(d){if(editDrivers.has(d))editDrivers.delete(d);else editDrivers.add(d);renderDrivers();}
+function toggleMerchant(id){if(editMerchants.has(id))editMerchants.delete(id);else editMerchants.add(id);renderMerchants();}
+
+document.getElementById('driverSearch').addEventListener('input',renderDrivers);
+document.getElementById('merchantSearch').addEventListener('input',renderMerchants);
+document.getElementById('agentSearch').addEventListener('input',renderAgentCards);
+document.getElementById('drawerCancel').addEventListener('click',closeDrawer);
 
 async function saveAssignments(){
   if(!currentAgent)return;
-  const drivers=Array.from(document.querySelectorAll('#driversAssign input:checked')).map(cb=>cb.value);
-  await fetch(`/admin/agents/${encodeURIComponent(currentAgent)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({drivers})});
-  const mChecks=document.querySelectorAll('#merchantsAssign input');
-  for(const cb of mChecks){
-    const id=cb.dataset.id;const m=merchantsData.find(x=>x.id==id);if(!m)continue;
-    if(cb.checked&&!m.agents.includes(currentAgent))m.agents.push(currentAgent);
-    if(!cb.checked&&m.agents.includes(currentAgent))m.agents=m.agents.filter(a=>a!==currentAgent);
-    await fetch(`/admin/merchants/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name,drivers:m.drivers,agents:m.agents})});
+  if(editDrivers.size===0&&editMerchants.size===0){if(!confirm('This agent will have no data. Continue?'))return;}
+  await fetch(`/admin/agents/${encodeURIComponent(currentAgent)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({drivers:Array.from(editDrivers)})});
+  for(const m of merchantsData){
+    const assigned=editMerchants.has(m.id);const agents=new Set(m.agents);
+    if(assigned)agents.add(currentAgent);else agents.delete(currentAgent);
+    await fetch(`/admin/merchants/${m.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name,drivers:m.drivers,agents:Array.from(agents)})});
   }
+  const toast=document.getElementById('toast');toast.classList.remove('hidden');setTimeout(()=>toast.classList.add('hidden'),2000);
+  closeDrawer();
   loadAgentsTab();
 }
-async function addAgent(){
-  const name=document.getElementById('agentName').value.trim();
-  const pw=document.getElementById('agentPass').value.trim();
-  const drivers=document.getElementById('agentDrivers').value.trim();
+
+function openNewAgentModal(){document.getElementById('newAgentModal').classList.remove('hidden');document.getElementById('newAgentName').value='';document.getElementById('newAgentPass').value='';newAgentDrivers.clear();newAgentMerchants.clear();renderNewAgentLists();}
+function closeNewAgentModal(){document.getElementById('newAgentModal').classList.add('hidden');}
+let newAgentDrivers=new Set(), newAgentMerchants=new Set();
+function renderNewAgentLists(){
+  const dList=document.getElementById('newAgentDrivers');
+  dList.innerHTML=driversData.map(d=>{const a=newAgentDrivers.has(d)?'bg-blue-500 text-white':'bg-gray-200';return `<span class="chip ${a} cursor-pointer" onclick="toggleNewDriver('${d}')">${d}</span>`;}).join('');
+  const mList=document.getElementById('newAgentMerchants');
+  mList.innerHTML=merchantsData.map(m=>{const a=newAgentMerchants.has(m.id)?'bg-green-500 text-white':'bg-gray-200';return `<span class="chip ${a} cursor-pointer" onclick="toggleNewMerchant(${m.id})">${m.name}</span>`;}).join('');
+}
+function toggleNewDriver(d){if(newAgentDrivers.has(d))newAgentDrivers.delete(d);else newAgentDrivers.add(d);renderNewAgentLists();}
+function toggleNewMerchant(id){if(newAgentMerchants.has(id))newAgentMerchants.delete(id);else newAgentMerchants.add(id);renderNewAgentLists();}
+async function createAgent(){
+  const name=document.getElementById('newAgentName').value.trim();
+  const pw=document.getElementById('newAgentPass').value.trim();
   if(!name||!pw)return;
-  await fetch('/admin/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:name,password:pw,drivers:drivers?drivers.split(',').map(s=>s.trim()):[]})});
-  document.getElementById('agentName').value='';
-  document.getElementById('agentPass').value='';
-  document.getElementById('agentDrivers').value='';
+  await fetch('/admin/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:name,password:pw,drivers:Array.from(newAgentDrivers)})});
+  for(const m of merchantsData){if(newAgentMerchants.has(m.id)){await fetch(`/admin/merchants/${m.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name,drivers:m.drivers,agents:m.agents.concat(name)})});}}
+  closeNewAgentModal();
   loadAgentsTab();
 }
 
