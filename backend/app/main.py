@@ -720,14 +720,26 @@ async def get_note(note_id: int, driver: str = Query(...)):
         if not note or note.driver_id != driver:
             raise HTTPException(status_code=404, detail="Note not found")
         item_rows = await session.execute(
-            select(Order.order_name, Order.cash_amount)
+            select(
+                Order.order_name,
+                Order.cash_amount,
+                Order.delivery_status,
+                Order.return_pending,
+            )
             .join(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
             .where(DeliveryNoteItem.note_id == note_id)
         )
-        items = [
-            {"orderName": name, "cashAmount": cash or 0}
-            for name, cash in item_rows.all()
-        ]
+        items = []
+        for name, cash, status, pending in item_rows.all():
+            pend = bool(pending) and status in ("Returned", "Annulé", "Refusé")
+            items.append(
+                {
+                    "orderName": name,
+                    "cashAmount": cash or 0,
+                    "status": "Pending Return" if pend else status,
+                    "returnPending": pend,
+                }
+            )
         return {
             "id": note.id,
             "createdAt": note.created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1610,7 +1622,14 @@ async def admin_list_notes(driver: str | None = Query(None)):
             items = []
             for o in orders:
                 await sync_order_paid_status(session, o)
-                items.append({"orderName": o.order_name, "status": o.delivery_status})
+                pending = bool(o.return_pending) and o.delivery_status in ("Returned", "Annulé", "Refusé")
+                items.append(
+                    {
+                        "orderName": o.order_name,
+                        "status": "Pending Return" if pending else o.delivery_status,
+                        "returnPending": pending,
+                    }
+                )
                 if o.delivery_status in ("Livré", "Paid"):
                     summary["delivered"] += 1
                 elif o.delivery_status in ("Annulé", "Refusé"):

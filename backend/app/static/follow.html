@@ -249,7 +249,11 @@ async function loadNotes(drivers){
         const detail=await apiGet(`/notes/${n.id}?driver=${d}`);
         n.items=n.items.map(it=>{
           const extra=detail.items.find(e=>e.orderName===it.orderName)||{};
-          return {...it,cashAmount:extra.cashAmount||0};
+          return {
+            ...it,
+            cashAmount: extra.cashAmount||0,
+            returnPending: extra.returnPending!==undefined?extra.returnPending:it.returnPending
+          };
         });
       }
       notesData[d]=list;
