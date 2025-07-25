@@ -10,3 +10,4 @@ __pycache__/
 .DS_Store
 Thumbs.db
 test.db
+merchants_test.db
