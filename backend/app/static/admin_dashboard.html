@@ -520,8 +520,7 @@ function renderAgentCards(){
   list.innerHTML=items.map(a=>{
     const initials=a.username.slice(0,2).toUpperCase();
     const driverChips=a.drivers.length===driversData.length?`<span class="chip chip-driver">All Drivers</span>`:a.drivers.map(d=>`<span class="chip chip-driver">${d}</span>`).join('');
-    const merchAssigned=merchantsData.filter(m=>m.agents.includes(a.username)).map(m=>m.name);
-    const merchChips=merchAssigned.length===merchantsData.length?`<span class="chip chip-merchant">All Merchants</span>`:merchAssigned.map(m=>`<span class="chip chip-merchant">${m}</span>`).join('');
+    const merchChips=a.merchants.length===merchantsData.length?`<span class="chip chip-merchant">All Merchants</span>`:a.merchants.map(m=>`<span class="chip chip-merchant">${m}</span>`).join('');
     return `<div class="p-2 bg-white rounded shadow hover:shadow-md flex justify-between items-start"><div><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center font-semibold">${initials}</div><span class="font-bold text-lg">${a.username}</span><span class="text-xs bg-gray-200 px-1 rounded">Agent</span></div><div class="mt-1 flex flex-wrap">${driverChips}${merchChips}</div></div><button class="text-blue-600" onclick="openDrawer('${a.username}')">✏️</button></div>`;
   }).join('');
 }
