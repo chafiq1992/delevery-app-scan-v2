@@ -321,9 +321,13 @@ function applyNotesRange(){
 
 function acceptReturn(driver,order,btn){
   btn.disabled=true;
+  const row = btn.closest('tr');
+  row.style.opacity='0.5';
+  const original = btn.textContent;
+  btn.textContent='Processing...';
   apiPost('/order/accept-return?driver='+driver,{order_name:order})
-    .then(()=>{btn.closest('tr').style.opacity='0.5';loadOrders(driversCache);loadArchive(driversCache);loadNotes(driversCache);})
-    .catch(e=>{alert('Error: '+e);btn.disabled=false;});
+    .then(()=>{loadOrders(driversCache);loadArchive(driversCache);loadNotes(driversCache);})
+    .catch(e=>{alert('Error: '+e);btn.disabled=false;row.style.opacity='1';btn.textContent=original;});
 }
 
 
