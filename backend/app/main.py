@@ -522,6 +522,13 @@ async def scan(
 
         if await order_exists(session, driver, order_number):
             existing = await get_order_row(session, driver, order_number)
+            if existing.return_pending and existing.delivery_status in ("Returned", "Annulé", "Refusé"):
+                return ScanResult(
+                    result="⚠️ Awaiting agent confirmation",
+                    order=order_number,
+                    tag=get_primary_display_tag(existing.tags),
+                    deliveryStatus="Pending Return",
+                )
             return ScanResult(
                 result="⚠️ Already scanned",
                 order=order_number,
@@ -713,14 +720,26 @@ async def get_note(note_id: int, driver: str = Query(...)):
         if not note or note.driver_id != driver:
             raise HTTPException(status_code=404, detail="Note not found")
         item_rows = await session.execute(
-            select(Order.order_name, Order.cash_amount)
+            select(
+                Order.order_name,
+                Order.cash_amount,
+                Order.delivery_status,
+                Order.return_pending,
+            )
             .join(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
             .where(DeliveryNoteItem.note_id == note_id)
         )
-        items = [
-            {"orderName": name, "cashAmount": cash or 0}
-            for name, cash in item_rows.all()
-        ]
+        items = []
+        for name, cash, status, pending in item_rows.all():
+            pend = bool(pending) and status in ("Returned", "Annulé", "Refusé")
+            items.append(
+                {
+                    "orderName": name,
+                    "cashAmount": cash or 0,
+                    "status": "Pending Return" if pend else status,
+                    "returnPending": pend,
+                }
+            )
         return {
             "id": note.id,
             "createdAt": note.created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -855,6 +874,7 @@ async def list_archived_orders(driver: str = Query(...)):
             .where(
                 Order.driver_id == driver,
                 Order.delivery_status.in_(ARCHIVE_STATUSES),
+                or_(Order.return_pending == None, Order.return_pending == 0),
                 or_(
                     DeliveryNote.status == "approved",
                     DeliveryNote.id == None,
@@ -976,6 +996,8 @@ async def update_order_status(
             order.status_log = (
                 (order.status_log or "") + f" | {payload.new_status} @ {ts}"
             ).strip(" |")
+            if payload.new_status in ("Returned", "Annulé", "Refusé"):
+                order.return_pending = 1
         if payload.note is not None:
             order.notes = payload.note
         if payload.driver_note is not None:
@@ -1032,6 +1054,41 @@ async def update_order_status(
                 "driver": driver,
                 "order": payload.order_name,
                 "status": payload.new_status,
+            }
+        )
+        return {"success": True}
+
+
+@app.post("/order/accept-return", tags=["orders"])
+async def accept_return(payload: ManualAdd, request: Request, driver: str = Query(...)):
+    async for session in get_session():
+        await get_driver(session, driver)
+        order = await get_order_row(session, driver, payload.order_name)
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        order.return_pending = 0
+        order.return_agent = request.cookies.get("agent") or "unknown"
+        order.return_time = dt.datetime.utcnow()
+        ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        order.follow_log = (
+            (order.follow_log or "")
+            + f"{ts} - Return accepted by {order.return_agent}\n"
+        ).lstrip()
+        order.status_log = (
+            (order.status_log or "")
+            + f" | return accepted {order.return_agent} @ {ts}"
+        ).strip(" |")
+
+        await session.commit()
+        await cache_delete("orders", driver)
+        await cache_delete("archive", driver)
+        await manager.broadcast(
+            {
+                "type": "status_update",
+                "driver": driver,
+                "order": payload.order_name,
+                "status": order.delivery_status,
             }
         )
         return {"success": True}
@@ -1245,7 +1302,7 @@ async def _compute_stats(
     result = await session.execute(q)
     rows = result.scalars().all()
 
-    total = delivered = returned = 0
+    total = delivered = returned = pending_ret = 0
     collect = fees = canceled_amount = 0.0
     for o in rows:
         sd = None
@@ -1270,14 +1327,18 @@ async def _compute_stats(
             collect += cash
             fees += fee
         elif status in ("Returned", "Annulé", "Refusé"):
-            returned += 1
-            canceled_amount += cash
+            if o.return_pending:
+                pending_ret += 1
+            else:
+                returned += 1
+                canceled_amount += cash
 
     rate = (delivered / total * 100) if total else 0
     return {
         "totalOrders": total,
         "delivered": delivered,
         "returned": returned,
+        "pendingReturns": pending_ret,
         "totalCollect": collect,
         "totalFees": fees,
         "deliveryRate": rate,
@@ -1561,7 +1622,14 @@ async def admin_list_notes(driver: str | None = Query(None)):
             items = []
             for o in orders:
                 await sync_order_paid_status(session, o)
-                items.append({"orderName": o.order_name, "status": o.delivery_status})
+                pending = bool(o.return_pending) and o.delivery_status in ("Returned", "Annulé", "Refusé")
+                items.append(
+                    {
+                        "orderName": o.order_name,
+                        "status": "Pending Return" if pending else o.delivery_status,
+                        "returnPending": pending,
+                    }
+                )
                 if o.delivery_status in ("Livré", "Paid"):
                     summary["delivered"] += 1
                 elif o.delivery_status in ("Annulé", "Refusé"):

@@ -54,6 +54,7 @@
     .status-cancelled{background:#f44336}
     .status-refusee{background:#ff9800}
     .status-pending{background:#2196f3}
+    .status-pending-return{background:#ffeb3b;color:#000}
     .paid-badge{background:#4caf50;color:#fff;padding:0.1rem 0.4rem;border-radius:4px;font-size:0.8rem;margin-left:0.3rem}
     .filters{position:sticky;top:3.5rem;background:var(--bg);padding-bottom:0.5rem;z-index:100}
     #orders .filters{top:6.5rem}
@@ -128,9 +129,10 @@ const headers={'Content-Type':'application/json'};
 const handleResp=async r=>{if(!r.ok){const t=await r.text();throw t||r.status;}return r.json();};
 const apiGet=p=>fetch(API+p).then(handleResp);
 const apiPut=(p,b={})=>fetch(API+p,{method:'PUT',headers,body:JSON.stringify(b)}).then(handleResp);
+const apiPost=(p,b={})=>fetch(API+p,{method:'POST',headers,body:JSON.stringify(b)}).then(handleResp);
 
 const deliveryStatuses=['Dispatched','Livré','Paid','En cours','Pas de réponse 1','Pas de réponse 2','Pas de réponse 3','Annulé','Refusé','Rescheduled','Returned'];
-const statusColors={'Livré':'#4caf50','Paid':'#1976d2','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336','En cours':'#ffeb3b'};
+const statusColors={'Livré':'#4caf50','Paid':'#1976d2','Annulé':'#f44336','Refusé':'#f44336','Returned':'#f44336','En cours':'#ffeb3b','Pending Return':'#ffeb3b'};
 
 let prevState={};
 
@@ -234,6 +236,8 @@ function populateStatusFilter(){
     const o=document.createElement('option');
     o.value=s; o.textContent=s; sel.appendChild(o);
   });
+  const o=document.createElement('option');
+  o.value='Pending Return'; o.textContent='Pending Return'; sel.appendChild(o);
 }
 
 async function loadNotes(drivers){
@@ -245,7 +249,11 @@ async function loadNotes(drivers){
         const detail=await apiGet(`/notes/${n.id}?driver=${d}`);
         n.items=n.items.map(it=>{
           const extra=detail.items.find(e=>e.orderName===it.orderName)||{};
-          return {...it,cashAmount:extra.cashAmount||0};
+          return {
+            ...it,
+            cashAmount: extra.cashAmount||0,
+            returnPending: extra.returnPending!==undefined?extra.returnPending:it.returnPending
+          };
         });
       }
       notesData[d]=list;
@@ -288,9 +296,9 @@ function renderNotes(){
       html+=`<details class="order-card"><summary style="background:${color};color:#fff;padding:0.4rem;border-radius:4px">DN #${n.id} – ${d} – Created ${n.createdAt}</summary><div style="padding:0.5rem">`;
       html+=`<table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead><tr><th>Order</th><th>Status</th><th>COD</th><th>Action</th></tr></thead><tbody>`;
       n.items.forEach(it=>{
-        const cls=it.status==='Paid'?'status-paid':(it.status==='Livré'?'status-delivered':(it.status==='Returned'?'status-cancelled':(it.status==='Annulé'?'status-cancelled':(it.status==='Refusé'?'status-refusee':'status-pending'))));
-        const btn=['Cancelled','Annulé','Refusé','Returned'].includes(it.status)?`<button class="return-btn" onclick="acceptReturn('${d}','${it.orderName}',this)">♻️ Accept Return</button>`:'';
-        const label=it.status==='Paid'?'Paid DH ✓':it.status;
+        const cls=it.returnPending?'status-pending-return':(it.status==='Paid'?'status-paid':(it.status==='Livré'?'status-delivered':(it.status==='Returned'?'status-cancelled':(it.status==='Annulé'?'status-cancelled':(it.status==='Refusé'?'status-refusee':'status-pending')))));
+        const btn=it.returnPending?`<button class="return-btn" onclick="acceptReturn('${d}','${it.orderName}',this)">♻️ Accept Return</button>`:'';
+        const label=it.returnPending?'Pending Return':(it.status==='Paid'?'Paid DH ✓':it.status);
         html+=`<tr><td>${it.orderName}</td><td><span class="status-chip ${cls}">${label}</span></td><td>${it.cashAmount}</td><td>${btn}</td></tr>`;
       });
       html+=`</tbody></table></div></details>`;
@@ -313,7 +321,7 @@ function applyNotesRange(){
 
 function acceptReturn(driver,order,btn){
   btn.disabled=true;
-  apiPut(`/order/status?driver=${driver}`,{order_name:order,new_status:'Returned'})
+  apiPost('/order/accept-return?driver='+driver,{order_name:order})
     .then(()=>{btn.closest('tr').style.opacity='0.5';loadOrders(driversCache);loadArchive(driversCache);loadNotes(driversCache);})
     .catch(e=>{alert('Error: '+e);btn.disabled=false;});
 }
