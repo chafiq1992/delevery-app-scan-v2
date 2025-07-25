@@ -448,17 +448,7 @@ def get_primary_display_tag(tags: str) -> str:
     return ""
 
 
-def safe_float(val):
-    """Return a float or 0.0 for falsy/non-numeric values."""
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return 0.0
 
-
-def get_cell(row, idx, default=""):
-    """Safely access a cell from a row, providing a default if missing."""
-    return row[idx] if idx < len(row) else default
 
 
 def parse_timestamp(val: str) -> dt.datetime:
@@ -493,39 +483,7 @@ async def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dic
 # ───────────────────────────────────────────────────────────────
 # Core functions – Database logic
 # ───────────────────────────────────────────────────────────────
-ORDER_HEADER = [
-    "Timestamp",
-    "Order Name",
-    "Customer Name",
-    "Customer Phone",
-    "Address",
-    "Tags",
-    "Fulfillment",
-    "Order Status",
-    "Store",
-    "Delivery Status",
-    "Notes",
-    "Scheduled Time",
-    "Scan Date",
-    "Cash Amount",
-    "Driver Fee",
-    "Payout ID",
-    "Status Log",
-    "Comm Log",
-]
 
-PAYOUT_HEADER = [
-    "Payout ID",
-    "Date Created",
-    "Orders",
-    "Total Cash",
-    "Total Fees",
-    "Total Payout",
-    "Status",
-    "Date Paid",
-]
-
-EMPLOYEE_HEADER = ["Timestamp", "Employee", "Order Number", "Amount"]
 
 
 async def order_exists(session: AsyncSession, driver_id: str, order_name: str) -> bool:
