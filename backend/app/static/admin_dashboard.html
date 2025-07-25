@@ -575,13 +575,9 @@ async function saveAssignments(){
   if(editDrivers.size===0&&editMerchants.size===0){if(!confirm('This agent will have no data. Continue?'))return;}
   const pw=document.getElementById('drawerPassword').value.trim();
   const payload={drivers:Array.from(editDrivers)};
+  payload.merchants=Array.from(editMerchants);
   if(pw)payload.password=pw;
   await fetch(`/admin/agents/${encodeURIComponent(currentAgent)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  for(const m of merchantsData){
-    const assigned=editMerchants.has(m.id);const agents=new Set(m.agents);
-    if(assigned)agents.add(currentAgent);else agents.delete(currentAgent);
-    await fetch(`/admin/merchants/${m.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name,drivers:m.drivers,agents:Array.from(agents)})});
-  }
   const toast=document.getElementById('toast');toast.classList.remove('hidden');setTimeout(()=>toast.classList.add('hidden'),2000);
   closeDrawer();
   loadAgentsTab();
@@ -602,8 +598,7 @@ async function createAgent(){
   const name=document.getElementById('newAgentName').value.trim();
   const pw=document.getElementById('newAgentPass').value.trim();
   if(!name||!pw)return;
-  await fetch('/admin/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:name,password:pw,drivers:Array.from(newAgentDrivers)})});
-  for(const m of merchantsData){if(newAgentMerchants.has(m.id)){await fetch(`/admin/merchants/${m.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name,drivers:m.drivers,agents:m.agents.concat(name)})});}}
+  await fetch('/admin/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:name,password:pw,drivers:Array.from(newAgentDrivers),merchants:Array.from(newAgentMerchants)})});
   closeNewAgentModal();
   loadAgentsTab();
 }

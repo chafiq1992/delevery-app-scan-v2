@@ -30,7 +30,6 @@ def reset_app(old):
     importlib.reload(app_db)
     importlib.reload(app_models)
     importlib.reload(app_main)
-    asyncio.run(app_main.init_db())
 
 
 async def create_records(db, models):
@@ -40,6 +39,15 @@ async def create_records(db, models):
         merchant = models.Merchant(name='Shop', drivers=[d1], agents=[agent])
         session.add_all([d1, agent, merchant])
         await session.commit()
+
+async def create_base(db, models):
+    async with db.AsyncSessionLocal() as session:
+        d1 = models.Driver(id='d1')
+        d2 = models.Driver(id='d2')
+        m = models.Merchant(name='Shop')
+        session.add_all([d1, d2, m])
+        await session.commit()
+        return m.id
 
 
 def test_admin_agents_include_merchants():
@@ -54,5 +62,33 @@ def test_admin_agents_include_merchants():
     assert agent['username'] == 'bob'
     assert agent['drivers'] == ['d1']
     assert agent['merchants'] == ['Shop']
+
+    reset_app(old_db)
+
+
+def test_agent_create_update_merchants():
+    app_main, app_db, app_models, client, old_db = setup_app()
+    mid = asyncio.run(create_base(app_db, app_models))
+
+    resp = client.post(
+        '/admin/agents',
+        json={
+            'username': 'alice',
+            'password': 'pw',
+            'drivers': ['d1'],
+            'merchants': [mid],
+        },
+    )
+    assert resp.status_code == 201
+
+    resp = client.get('/admin/agents')
+    data = resp.json()[0]
+    assert data['merchants'] == ['Shop']
+
+    resp = client.put('/admin/agents/alice', json={'username': 'alice', 'merchants': []})
+    assert resp.status_code == 200
+
+    resp = client.get('/admin/agents')
+    assert resp.json()[0]['merchants'] == []
 
     reset_app(old_db)

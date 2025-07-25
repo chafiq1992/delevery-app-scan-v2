@@ -30,7 +30,6 @@ def reset_app(old):
     importlib.reload(app_db)
     importlib.reload(app_models)
     importlib.reload(app_main)
-    asyncio.run(app_main.init_db())
 
 async def create_records(db, models):
     async with db.AsyncSessionLocal() as session:
