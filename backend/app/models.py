@@ -133,3 +133,40 @@ class Agent(Base):
     password = Column(String, nullable=False)
 
     drivers = relationship("Driver", secondary=agent_driver_table, backref="agents")
+
+
+# ---------------------------------------------------------------------------
+# Merchants and their assignments
+# ---------------------------------------------------------------------------
+
+# Association table linking merchants to drivers
+merchant_driver_table = Table(
+    "merchant_drivers",
+    Base.metadata,
+    Column("merchant_id", Integer, ForeignKey("merchants.id"), primary_key=True),
+    Column("driver_id", String, ForeignKey("drivers.id"), primary_key=True),
+)
+
+# Association table linking merchants to follow agents
+merchant_agent_table = Table(
+    "merchant_agents",
+    Base.metadata,
+    Column("merchant_id", Integer, ForeignKey("merchants.id"), primary_key=True),
+    Column("agent_id", Integer, ForeignKey("agents.id"), primary_key=True),
+)
+
+
+class Merchant(Base):
+    """Merchant entity accessible to multiple agents and drivers."""
+
+    __tablename__ = "merchants"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, unique=True, nullable=False)
+
+    drivers = relationship(
+        "Driver", secondary=merchant_driver_table, backref="merchants"
+    )
+    agents = relationship(
+        "Agent", secondary=merchant_agent_table, backref="merchants"
+    )

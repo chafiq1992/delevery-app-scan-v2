@@ -29,6 +29,7 @@
     <div class="tab" data-tab="parcels" onclick="activateTab('parcels');loadParcelsTab()">Parcels DB</div>
     <div class="tab" data-tab="payouts" onclick="activateTab('payouts');loadPayoutsTab()">Payouts DB</div>
     <div class="tab" data-tab="agents" onclick="activateTab('agents');loadAgentsTab()">Agents</div>
+    <div class="tab" data-tab="merchants" onclick="activateTab('merchants');loadMerchantsTab()">Merchants</div>
     <div class="tab" data-tab="placeholder" onclick="activateTab('placeholder')">Other</div>
   </div>
 
@@ -214,6 +215,18 @@
       <button onclick="addAgent()" class="px-3 py-1 bg-green-600 text-white rounded">Add</button>
     </div>
     <div id="agentsList"></div>
+  </div>
+
+  <!-- Merchants management tab -->
+  <div id="merchants" class="tab-content">
+    <h2 class="text-lg font-semibold mb-3">Merchants</h2>
+    <div class="mb-3">
+      <input id="merchantName" placeholder="Name" class="border p-1 rounded" />
+      <input id="merchantAgents" placeholder="Agents (comma separated)" class="border p-1 rounded" />
+      <input id="merchantDrivers" placeholder="Drivers (comma separated)" class="border p-1 rounded" />
+      <button onclick="addMerchant()" class="px-3 py-1 bg-green-600 text-white rounded">Add</button>
+    </div>
+    <div id="merchantsList"></div>
   </div>
 
   <div id="placeholder" class="tab-content">
@@ -440,6 +453,24 @@ async function addAgent(){
   document.getElementById('agentDrivers').value='';
   loadAgentsTab();
 }
+
+// ----------------------- MERCHANTS -------------------------------
+async function loadMerchantsTab(){
+  const list=document.getElementById('merchantsList');
+  const data=await fetch('/admin/merchants').then(r=>r.json()).catch(()=>[]);
+  list.innerHTML=data.map(m=>`<div class='border p-2 my-1'>${m.name} – drivers: ${m.drivers.join(', ')} – agents: ${m.agents.join(', ')}</div>`).join('');
+}
+async function addMerchant(){
+  const name=document.getElementById('merchantName').value.trim();
+  const agents=document.getElementById('merchantAgents').value.trim();
+  const drivers=document.getElementById('merchantDrivers').value.trim();
+  if(!name)return;
+  await fetch('/admin/merchants',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,agents:agents?agents.split(',').map(s=>s.trim()):[],drivers:drivers?drivers.split(',').map(s=>s.trim()):[]})});
+  document.getElementById('merchantName').value='';
+  document.getElementById('merchantAgents').value='';
+  document.getElementById('merchantDrivers').value='';
+  loadMerchantsTab();
+}
 document.getElementById('payoutsBody').addEventListener('dblclick',async e=>{
   const td=e.target.closest('td[data-field]');
   if(!td)return;const field=td.dataset.field;const id=td.parentNode.dataset.id;const val=prompt(`Edit ${field}`,td.textContent);if(val===null)return;td.textContent=val;const driver=document.getElementById('payoutsDriver').value;let payload={};
@@ -510,6 +541,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   ws.onmessage=evt=>{try{const m=JSON.parse(evt.data);if((m.type==='note_update'||m.type==='note_approved')&&m.driver===currentDriver){loadAdminNotes();}}catch(e){}};
   loadVerifyTab();
   loadAgentsTab();
+  loadMerchantsTab();
 });
 </script>
 </body>

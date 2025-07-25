@@ -50,6 +50,7 @@ except Exception:  # pragma: no cover - redis optional
 from pydantic import BaseModel
 
 from sqlalchemy import select, or_, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from .db import get_session, init_db
 from .models import (
@@ -62,6 +63,7 @@ from .models import (
     VerificationOrder,
     Agent,
     agent_driver_table,
+    Merchant,
 )
 from .utils import (
     calculate_driver_fee,
@@ -180,6 +182,19 @@ class AgentOut(BaseModel):
     drivers: List[str]
 
 
+class MerchantIn(BaseModel):
+    name: str
+    agents: List[str] | None = None  # usernames
+    drivers: List[str] | None = None
+
+
+class MerchantOut(BaseModel):
+    id: int
+    name: str
+    agents: List[str]
+    drivers: List[str]
+
+
 class PayoutUpdate(BaseModel):
     orders: Optional[str] = None
     total_cash: Optional[float] = None
@@ -215,6 +230,10 @@ async def load_drivers(session):
 async def load_agent(session, username: str) -> Agent | None:
     result = await session.execute(select(Agent).where(Agent.username == username))
     return result.scalar_one_or_none()
+
+
+async def load_merchant(session, merchant_id: int) -> Merchant | None:
+    return await session.get(Merchant, merchant_id)
 
 
 # Simple admin password (override via env var)
@@ -1636,5 +1655,75 @@ async def admin_update_agent(username: str, data: AgentIn):
         if data.drivers is not None:
             drivers = await session.execute(select(Driver).where(Driver.id.in_(data.drivers)))
             agent.drivers = list(drivers.scalars())
+        await session.commit()
+        return {"success": True}
+
+
+# ---------------------------- MERCHANTS ---------------------------------
+
+@app.get("/admin/merchants", response_model=list[MerchantOut], tags=["admin"])
+async def admin_list_merchants():
+    async for session in get_session():
+        result = await session.execute(
+            select(Merchant).options(
+                selectinload(Merchant.drivers), selectinload(Merchant.agents)
+            )
+        )
+        merchants = []
+        for m in result.scalars().all():
+            merchants.append(
+                MerchantOut(
+                    id=m.id,
+                    name=m.name,
+                    drivers=[d.id for d in m.drivers],
+                    agents=[a.username for a in m.agents],
+                )
+            )
+        return merchants
+
+
+@app.post("/admin/merchants", tags=["admin"], status_code=201)
+async def admin_create_merchant(data: MerchantIn):
+    async for session in get_session():
+        exists = await session.execute(select(Merchant).where(Merchant.name == data.name))
+        if exists.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Merchant exists")
+        m = Merchant(name=data.name)
+        if data.drivers:
+            drivers = await session.execute(select(Driver).where(Driver.id.in_(data.drivers)))
+            m.drivers = drivers.scalars().all()
+        if data.agents:
+            agents = await session.execute(select(Agent).where(Agent.username.in_(data.agents)))
+            m.agents = agents.scalars().all()
+        session.add(m)
+        await session.commit()
+        return {"success": True, "id": m.id}
+
+
+@app.put("/admin/merchants/{merchant_id}", tags=["admin"])
+async def admin_update_merchant(merchant_id: int, data: MerchantIn):
+    async for session in get_session():
+        merchant = await load_merchant(session, merchant_id)
+        if not merchant:
+            raise HTTPException(status_code=404, detail="Not found")
+        await session.refresh(merchant, attribute_names=["drivers", "agents"])
+        merchant.name = data.name
+        if data.drivers is not None:
+            drivers = await session.execute(select(Driver).where(Driver.id.in_(data.drivers)))
+            merchant.drivers = drivers.scalars().all()
+        if data.agents is not None:
+            agents = await session.execute(select(Agent).where(Agent.username.in_(data.agents)))
+            merchant.agents = agents.scalars().all()
+        await session.commit()
+        return {"success": True}
+
+
+@app.delete("/admin/merchants/{merchant_id}", tags=["admin"])
+async def admin_delete_merchant(merchant_id: int):
+    async for session in get_session():
+        merchant = await load_merchant(session, merchant_id)
+        if not merchant:
+            raise HTTPException(status_code=404, detail="Not found")
+        await session.delete(merchant)
         await session.commit()
         return {"success": True}

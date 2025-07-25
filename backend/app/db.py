@@ -12,6 +12,7 @@ from .models import (
     DeliveryNoteItem,
     EmployeeLog,
     VerificationOrder,
+    Merchant,
 )
 
 logger = logging.getLogger(__name__)
