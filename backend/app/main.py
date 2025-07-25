@@ -861,21 +861,18 @@ async def list_notes(driver: str = Query(...), history: bool = Query(False)):
         result = await session.execute(q)
         notes: list[dict] = []
         for n in result.scalars():
-            item_rows = await session.execute(
-                select(DeliveryNoteItem).where(DeliveryNoteItem.note_id == n.id)
+            row = await session.execute(
+                select(func.count(Order.id), func.sum(Order.cash_amount))
+                .join(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
+                .where(DeliveryNoteItem.note_id == n.id)
             )
-            items = item_rows.scalars().all()
-            total_cash = 0.0
-            for it in items:
-                o = await session.get(Order, it.order_id)
-                if o:
-                    total_cash += o.cash_amount or 0
+            parcels, total_cash = row.first()
             notes.append(
                 {
                     "id": n.id,
                     "createdAt": n.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    "parcels": len(items),
-                    "totalCod": total_cash,
+                    "parcels": parcels or 0,
+                    "totalCod": total_cash or 0,
                     "status": n.status,
                 }
             )
@@ -889,15 +886,14 @@ async def get_note(note_id: int, driver: str = Query(...)):
         if not note or note.driver_id != driver:
             raise HTTPException(status_code=404, detail="Note not found")
         item_rows = await session.execute(
-            select(DeliveryNoteItem).where(DeliveryNoteItem.note_id == note_id)
+            select(Order.order_name, Order.cash_amount)
+            .join(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
+            .where(DeliveryNoteItem.note_id == note_id)
         )
-        items: list[dict] = []
-        for it in item_rows.scalars():
-            o = await session.get(Order, it.order_id)
-            if o:
-                items.append(
-                    {"orderName": o.order_name, "cashAmount": o.cash_amount or 0}
-                )
+        items = [
+            {"orderName": name, "cashAmount": cash or 0}
+            for name, cash in item_rows.all()
+        ]
         return {
             "id": note.id,
             "createdAt": note.created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1726,13 +1722,21 @@ async def admin_verify(
                 *q_filter,
             ).order_by(VerificationOrder.id.desc())
         result = await session.execute(stmt)
+        ver_rows = result.scalars().all()
+
+        order_names = [v.order_name for v in ver_rows]
+        order_result = await session.execute(
+            select(Order)
+            .where(Order.order_name.in_(order_names))
+            .order_by(Order.timestamp.desc())
+        )
+        orders_by_name = {}
+        for o in order_result.scalars():
+            orders_by_name.setdefault(o.order_name, o)
+
         rows_map: dict[str, dict] = {}
-        for v in result.scalars():
-            order = await session.scalar(
-                select(Order)
-                .where(Order.order_name == v.order_name)
-                .order_by(Order.timestamp.desc())
-            )
+        for v in ver_rows:
+            order = orders_by_name.get(v.order_name)
             if order:
                 if not v.driver_id:
                     v.driver_id = order.driver_id
@@ -1806,14 +1810,14 @@ async def admin_list_notes(driver: str | None = Query(None)):
         notes = []
         for n in result.scalars():
             item_rows = await session.execute(
-                select(DeliveryNoteItem).where(DeliveryNoteItem.note_id == n.id)
+                select(Order)
+                .join(DeliveryNoteItem, DeliveryNoteItem.order_id == Order.id)
+                .where(DeliveryNoteItem.note_id == n.id)
             )
-            items = []
+            orders = item_rows.scalars().all()
             summary = {"delivered": 0, "cancelled": 0, "returned": 0}
-            for it in item_rows.scalars():
-                o = await session.get(Order, it.order_id)
-                if not o:
-                    continue
+            items = []
+            for o in orders:
                 await sync_order_paid_status(session, o)
                 items.append({"orderName": o.order_name, "status": o.delivery_status})
                 if o.delivery_status in ("Livré", "Paid"):
