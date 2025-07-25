@@ -429,10 +429,12 @@ async def follow_login(response: Response, username: str = Form(...), password: 
 
 
 @app.get("/drivers")
-async def list_drivers(request: Request, agent: str | None = None):
+async def list_drivers(request: Request, agent: str | None = None, all: bool = False):
     """List drivers; if agent cookie or query provided, filter assignments."""
     async for session in get_session():
         drivers = await load_drivers(session)
+        if all:
+            return list(drivers.keys())
         if not agent:
             agent = request.cookies.get("agent")
         if agent:

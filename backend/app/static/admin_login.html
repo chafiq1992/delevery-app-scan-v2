@@ -25,7 +25,14 @@
     function login() {
       const pw = document.getElementById('adminPassword').value.trim();
       fetch('/admin/login', {method:'POST', body:new URLSearchParams({password: pw})})
-        .then(r => r.ok ? location.href='/static/admin_dashboard.html' : alert('Invalid password'));
+        .then(r => {
+          if (r.ok) {
+            document.cookie = 'agent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            location.href='/static/admin_dashboard.html';
+          } else {
+            alert('Invalid password');
+          }
+        });
     }
   </script>
 </body>
