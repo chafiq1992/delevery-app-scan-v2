@@ -10,6 +10,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 
+from sqlalchemy import Table
+
 Base = declarative_base()
 
 class Driver(Base):
@@ -106,3 +108,28 @@ class VerificationOrder(Base):
     scan_time = Column(DateTime)
 
     driver = relationship("Driver")
+
+
+# ---------------------------------------------------------------------------
+# Follow Agents and assignments
+# ---------------------------------------------------------------------------
+
+# Association table linking follow agents to drivers they manage
+agent_driver_table = Table(
+    "agent_drivers",
+    Base.metadata,
+    Column("agent_id", Integer, ForeignKey("agents.id"), primary_key=True),
+    Column("driver_id", String, ForeignKey("drivers.id"), primary_key=True),
+)
+
+
+class Agent(Base):
+    """Follow agent able to access specific drivers."""
+
+    __tablename__ = "agents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, unique=True, nullable=False)
+    password = Column(String, nullable=False)
+
+    drivers = relationship("Driver", secondary=agent_driver_table, backref="agents")
