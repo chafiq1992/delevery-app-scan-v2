@@ -21,7 +21,7 @@ def setup_app():
     return app_main, app_db, app_models, client, old
 
 def reset_app(old):
-    if old:
+    if old and old.startswith('sqlite'):  # avoid reconnecting to remote DB
         os.environ['DATABASE_URL'] = old
     import importlib
     from app import main as app_main

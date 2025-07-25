@@ -175,6 +175,7 @@ class AgentIn(BaseModel):
     username: str
     password: str
     drivers: List[str] | None = None
+    merchants: List[int] | None = None
 
 
 class AgentOut(BaseModel):
@@ -228,7 +229,11 @@ async def load_drivers(session):
 
 
 async def load_agent(session, username: str) -> Agent | None:
-    result = await session.execute(select(Agent).where(Agent.username == username))
+    result = await session.execute(
+        select(Agent)
+        .where(Agent.username == username)
+        .options(selectinload(Agent.drivers), selectinload(Agent.merchants))
+    )
     return result.scalar_one_or_none()
 
 
@@ -1710,6 +1715,11 @@ async def admin_create_agent(agent: AgentIn):
         if agent.drivers:
             drivers = await session.execute(select(Driver).where(Driver.id.in_(agent.drivers)))
             a.drivers = list(drivers.scalars())
+        if agent.merchants:
+            merchants = await session.execute(
+                select(Merchant).where(Merchant.id.in_(agent.merchants))
+            )
+            a.merchants = list(merchants.scalars())
         session.add(a)
         await session.commit()
         return {"success": True}
@@ -1725,6 +1735,11 @@ async def admin_update_agent(username: str, data: AgentIn):
         if data.drivers is not None:
             drivers = await session.execute(select(Driver).where(Driver.id.in_(data.drivers)))
             agent.drivers = list(drivers.scalars())
+        if data.merchants is not None:
+            merchants = await session.execute(
+                select(Merchant).where(Merchant.id.in_(data.merchants))
+            )
+            agent.merchants = list(merchants.scalars())
         await session.commit()
         return {"success": True}
 
