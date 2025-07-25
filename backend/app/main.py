@@ -338,23 +338,37 @@ async def sync_verification_orders(date_str: str, session: AsyncSession) -> None
 
 
 @app.get("/", response_class=HTMLResponse)
-async def show_login():
+async def show_landing():
+    """Landing page with links to the individual login pages."""
+    return FileResponse(os.path.join(STATIC_DIR, "landing.html"))
+
+
+@app.get("/driver-login", response_class=HTMLResponse)
+async def show_driver_login():
     return FileResponse(os.path.join(STATIC_DIR, "login.html"))
 
 
-@app.get("/admin", response_class=HTMLResponse)
+@app.get("/admin-login", response_class=HTMLResponse)
 async def show_admin_login():
     return FileResponse(os.path.join(STATIC_DIR, "admin_login.html"))
 
+@app.get("/admin", response_class=HTMLResponse)
+async def show_admin_login_alias():
+    return await show_admin_login()
 
-@app.get("/follow", response_class=HTMLResponse)
+
+@app.get("/follow-login", response_class=HTMLResponse)
 async def show_follow_login():
     """Serve login page for follow agents."""
     return FileResponse(os.path.join(STATIC_DIR, "follow_login.html"))
 
+@app.get("/follow", response_class=HTMLResponse)
+async def show_follow_login_alias():
+    return await show_follow_login()
+
 
 @app.post("/login", response_class=HTMLResponse)
-async def login(driver_id: str = Form(...)):
+async def login(driver_id: str = Form(...), password: str | None = Form(None)):
     async for session in get_session():
         drivers = await load_drivers(session)
         if driver_id in drivers:
@@ -373,7 +387,7 @@ async def admin_login(password: str = Form(...)):
 
 
 @app.post("/follow/login")
-async def follow_login(password: str = Form(...)):
+async def follow_login(username: str = Form(...), password: str = Form(...)):
     """Authenticate follow agents using the admin password for now."""
     if password == ADMIN_PASSWORD:
         return {"success": True}
