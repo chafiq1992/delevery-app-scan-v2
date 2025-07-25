@@ -567,6 +567,7 @@ document.getElementById('driverSearch').addEventListener('input',renderDrivers);
 document.getElementById('merchantSearch').addEventListener('input',renderMerchants);
 document.getElementById('agentSearch').addEventListener('input',renderAgentCards);
 document.getElementById('drawerCancel').addEventListener('click',closeDrawer);
+document.getElementById('drawerSave').addEventListener('click', saveAssignments);
 
 async function saveAssignments(){
   if(!currentAgent)return;
