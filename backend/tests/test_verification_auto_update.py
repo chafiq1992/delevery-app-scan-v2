@@ -13,7 +13,8 @@ if os.path.exists("test.db"):
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///test.db"
 
 from app import main as app_main
-from app.db import AsyncSessionLocal, VerificationOrder
+from app.db import AsyncSessionLocal
+from app.models import VerificationOrder
 
 importlib.reload(app_main)
 
