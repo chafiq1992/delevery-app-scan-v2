@@ -465,6 +465,29 @@ def parse_timestamp(val: str) -> dt.datetime:
     return dt.datetime.fromisoformat(val)
 
 
+def serialize_order(order: Order) -> dict:
+    """Convert an Order ORM object to a serializable dictionary."""
+    return {
+        "timestamp": order.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+        "orderName": order.order_name,
+        "customerName": order.customer_name,
+        "customerPhone": order.customer_phone,
+        "address": order.address,
+        "tags": order.tags,
+        "deliveryStatus": order.delivery_status or "Dispatched",
+        "notes": order.notes,
+        "driverNotes": order.driver_notes,
+        "scheduledTime": order.scheduled_time,
+        "scanDate": order.scan_date,
+        "cashAmount": order.cash_amount or 0,
+        "driverFee": order.driver_fee or 0,
+        "payoutId": order.payout_id,
+        "statusLog": order.status_log,
+        "commLog": order.comm_log,
+        "followLog": order.follow_log,
+    }
+
+
 async def get_order_from_store(order_name: str, store_cfg: dict) -> Optional[dict]:
     """Call Shopify Admin API by order name (#1234) using async HTTP."""
     auth = (store_cfg["api_key"], store_cfg["password"])
@@ -958,29 +981,7 @@ async def list_active_orders(driver: str = Query(...)):
         )
         rows = result.scalars().all()
 
-        active = []
-        for o in rows:
-            active.append(
-                {
-                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                    "orderName": o.order_name,
-                    "customerName": o.customer_name,
-                    "customerPhone": o.customer_phone,
-                    "address": o.address,
-                    "tags": o.tags,
-                    "deliveryStatus": o.delivery_status or "Dispatched",
-                    "notes": o.notes,
-                    "driverNotes": o.driver_notes,
-                    "scheduledTime": o.scheduled_time,
-                    "scanDate": o.scan_date,
-                    "cashAmount": o.cash_amount or 0,
-                    "driverFee": o.driver_fee or 0,
-                    "payoutId": o.payout_id,
-                    "statusLog": o.status_log,
-                    "commLog": o.comm_log,
-                    "followLog": o.follow_log,
-                }
-            )
+        active = [serialize_order(o) for o in rows]
 
     def sort_key(o):
         if o["scheduledTime"]:
@@ -1031,29 +1032,7 @@ async def list_archived_orders(driver: str = Query(...)):
         )
         rows = result.scalars().all()
 
-        archived = []
-        for o in rows:
-            archived.append(
-                {
-                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                    "orderName": o.order_name,
-                    "customerName": o.customer_name,
-                    "customerPhone": o.customer_phone,
-                    "address": o.address,
-                    "tags": o.tags,
-                    "deliveryStatus": o.delivery_status or "Dispatched",
-                    "notes": o.notes,
-                    "driverNotes": o.driver_notes,
-                    "scheduledTime": o.scheduled_time,
-                    "scanDate": o.scan_date,
-                    "cashAmount": o.cash_amount or 0,
-                    "driverFee": o.driver_fee or 0,
-                    "payoutId": o.payout_id,
-                    "statusLog": o.status_log,
-                    "commLog": o.comm_log,
-                    "followLog": o.follow_log,
-                }
-            )
+        archived = [serialize_order(o) for o in rows]
 
     await cache_set("archive", driver, archived)
     return archived
@@ -1082,29 +1061,7 @@ async def list_all_orders(driver: str = Query(...)):
         )
         rows = result.scalars().all()
 
-        all_orders = []
-        for o in rows:
-            all_orders.append(
-                {
-                    "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                    "orderName": o.order_name,
-                    "customerName": o.customer_name,
-                    "customerPhone": o.customer_phone,
-                    "address": o.address,
-                    "tags": o.tags,
-                    "deliveryStatus": o.delivery_status or "Dispatched",
-                    "notes": o.notes,
-                    "driverNotes": o.driver_notes,
-                    "scheduledTime": o.scheduled_time,
-                    "scanDate": o.scan_date,
-                    "cashAmount": o.cash_amount or 0,
-                    "driverFee": o.driver_fee or 0,
-                    "payoutId": o.payout_id,
-                    "statusLog": o.status_log,
-                    "commLog": o.comm_log,
-                    "followLog": o.follow_log,
-                }
-            )
+        all_orders = [serialize_order(o) for o in rows]
 
     await cache_set("orders_all", driver, all_orders)
     return all_orders
@@ -1158,28 +1115,9 @@ async def list_followup_orders(driver: str = Query(...)):
                 or (now - last_update).total_seconds() > 8 * 3600
                 or o.delivery_status in ["Pas de réponse 3", "Rescheduled"]
             ):
-                followups.append(
-                    {
-                        "timestamp": o.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                        "orderName": o.order_name,
-                        "customerName": o.customer_name,
-                        "customerPhone": o.customer_phone,
-                        "address": o.address,
-                        "tags": o.tags,
-                        "deliveryStatus": o.delivery_status or "Dispatched",
-                        "notes": o.notes,
-                        "driverNotes": o.driver_notes,
-                        "scheduledTime": o.scheduled_time,
-                        "scanDate": o.scan_date,
-                        "cashAmount": o.cash_amount or 0,
-                        "driverFee": o.driver_fee or 0,
-                        "payoutId": o.payout_id,
-                        "statusLog": o.status_log,
-                        "commLog": o.comm_log,
-                        "followLog": o.follow_log,
-                        "urgent": overdue,
-                    }
-                )
+                item = serialize_order(o)
+                item["urgent"] = overdue
+                followups.append(item)
 
     await cache_set("followups", driver, followups)
     return followups
