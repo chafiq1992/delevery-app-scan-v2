@@ -53,6 +53,9 @@ def test_agent_merchant_assignment():
     resp = client.post('/admin/agents', json={'username': 'bob', 'password': 'pw', 'drivers': ['d1'], 'merchants': [mid1]})
     assert resp.status_code == 201
 
+    agents = client.get('/admin/agents').json()
+    assert agents[0]['merchants'] == [mid1]
+
     data = {m['id']: m for m in client.get('/admin/merchants').json()}
     assert data[mid1]['agents'] == ['bob']
 
@@ -65,6 +68,9 @@ def test_agent_merchant_assignment():
         json={'username': 'bob', 'password': 'pw', 'drivers': ['d1'], 'merchants': [mid2]},
     )
     assert resp.status_code == 200
+
+    agents = client.get('/admin/agents').json()
+    assert agents[0]['merchants'] == [mid2]
 
     data = {m['id']: m for m in client.get('/admin/merchants').json()}
     assert data[mid1]['agents'] == []

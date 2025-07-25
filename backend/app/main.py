@@ -181,6 +181,7 @@ class AgentIn(BaseModel):
 class AgentOut(BaseModel):
     username: str
     drivers: List[str]
+    merchants: List[int]
 
 
 class MerchantIn(BaseModel):
@@ -1698,11 +1699,17 @@ async def employee_logs():
 @app.get("/admin/agents", response_model=list[AgentOut], tags=["admin"])
 async def admin_list_agents():
     async for session in get_session():
-        result = await session.execute(select(Agent))
-        agents = []
-        for a in result.scalars():
-            agents.append(AgentOut(username=a.username, drivers=[d.id for d in a.drivers]))
-        return agents
+        result = await session.execute(
+            select(Agent).options(selectinload(Agent.drivers), selectinload(Agent.merchants))
+        )
+        return [
+            AgentOut(
+                username=a.username,
+                drivers=[d.id for d in a.drivers],
+                merchants=[m.id for m in a.merchants],
+            )
+            for a in result.scalars()
+        ]
 
 
 @app.post("/admin/agents", tags=["admin"], status_code=201)
