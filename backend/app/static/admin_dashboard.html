@@ -28,6 +28,7 @@
     <div class="tab" data-tab="verify" onclick="activateTab('verify');loadVerifyTab()">Order Verification</div>
     <div class="tab" data-tab="parcels" onclick="activateTab('parcels');loadParcelsTab()">Parcels DB</div>
     <div class="tab" data-tab="payouts" onclick="activateTab('payouts');loadPayoutsTab()">Payouts DB</div>
+    <div class="tab" data-tab="agents" onclick="activateTab('agents');loadAgentsTab()">Agents</div>
     <div class="tab" data-tab="placeholder" onclick="activateTab('placeholder')">Other</div>
   </div>
 
@@ -201,6 +202,18 @@
         <tbody id="payoutsBody"></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- Agents management tab -->
+  <div id="agents" class="tab-content">
+    <h2 class="text-lg font-semibold mb-3">Agents</h2>
+    <div class="mb-3">
+      <input id="agentName" placeholder="Username" class="border p-1 rounded" />
+      <input id="agentPass" type="password" placeholder="Password" class="border p-1 rounded" />
+      <input id="agentDrivers" placeholder="Drivers (comma separated)" class="border p-1 rounded" />
+      <button onclick="addAgent()" class="px-3 py-1 bg-green-600 text-white rounded">Add</button>
+    </div>
+    <div id="agentsList"></div>
   </div>
 
   <div id="placeholder" class="tab-content">
@@ -409,6 +422,24 @@ async function loadPayouts(){
     body.appendChild(tr);
   });
 }
+
+// ----------------------- AGENTS -------------------------------
+async function loadAgentsTab(){
+  const list=document.getElementById('agentsList');
+  const data=await fetch('/admin/agents').then(r=>r.json()).catch(()=>[]);
+  list.innerHTML=data.map(a=>`<div class='border p-2 my-1'>${a.username} – drivers: ${a.drivers.join(', ')}</div>`).join('');
+}
+async function addAgent(){
+  const name=document.getElementById('agentName').value.trim();
+  const pw=document.getElementById('agentPass').value.trim();
+  const drivers=document.getElementById('agentDrivers').value.trim();
+  if(!name||!pw)return;
+  await fetch('/admin/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:name,password:pw,drivers:drivers?drivers.split(',').map(s=>s.trim()):[]})});
+  document.getElementById('agentName').value='';
+  document.getElementById('agentPass').value='';
+  document.getElementById('agentDrivers').value='';
+  loadAgentsTab();
+}
 document.getElementById('payoutsBody').addEventListener('dblclick',async e=>{
   const td=e.target.closest('td[data-field]');
   if(!td)return;const field=td.dataset.field;const id=td.parentNode.dataset.id;const val=prompt(`Edit ${field}`,td.textContent);if(val===null)return;td.textContent=val;const driver=document.getElementById('payoutsDriver').value;let payload={};
@@ -478,6 +509,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const ws=new WebSocket(`${wsProtocol}://${location.host}/ws`);
   ws.onmessage=evt=>{try{const m=JSON.parse(evt.data);if((m.type==='note_update'||m.type==='note_approved')&&m.driver===currentDriver){loadAdminNotes();}}catch(e){}};
   loadVerifyTab();
+  loadAgentsTab();
 });
 </script>
 </body>

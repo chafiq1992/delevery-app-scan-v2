@@ -39,6 +39,7 @@ from fastapi import Form
 from cachetools import TTLCache
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi import Request, Response
 from .sheet_utils import load_sheet_orders, get_order_from_sheet
 
 try:
@@ -59,6 +60,8 @@ from .models import (
     DeliveryNote,
     DeliveryNoteItem,
     VerificationOrder,
+    Agent,
+    agent_driver_table,
 )
 from .utils import (
     calculate_driver_fee,
@@ -166,6 +169,17 @@ class VerificationUpdate(BaseModel):
     scan_time: Optional[str] = None  # YYYY-MM-DD HH:MM:SS
 
 
+class AgentIn(BaseModel):
+    username: str
+    password: str
+    drivers: List[str] | None = None
+
+
+class AgentOut(BaseModel):
+    username: str
+    drivers: List[str]
+
+
 class PayoutUpdate(BaseModel):
     orders: Optional[str] = None
     total_cash: Optional[float] = None
@@ -196,6 +210,11 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 async def load_drivers(session):
     result = await session.execute(select(Driver))
     return {d.id: d for d in result.scalars()}
+
+
+async def load_agent(session, username: str) -> Agent | None:
+    result = await session.execute(select(Agent).where(Agent.username == username))
+    return result.scalar_one_or_none()
 
 
 # Simple admin password (override via env var)
@@ -398,17 +417,32 @@ async def admin_login(password: str = Form(...)):
 
 
 @app.post("/follow/login")
-async def follow_login(username: str = Form(...), password: str = Form(...)):
-    """Authenticate follow agents using the admin password for now."""
-    if password == ADMIN_PASSWORD:
-        return {"success": True}
+async def follow_login(response: Response, username: str = Form(...), password: str = Form(...)):
+    """Authenticate follow agents using stored agent credentials."""
+    async for session in get_session():
+        agent = await load_agent(session, username)
+        if agent and agent.password == password:
+            resp = {"success": True}
+            response.set_cookie("agent", username)
+            return resp
     raise HTTPException(status_code=401, detail="Invalid follow password")
 
 
 @app.get("/drivers")
-async def list_drivers():
+async def list_drivers(request: Request, agent: str | None = None):
+    """List drivers; if agent cookie or query provided, filter assignments."""
     async for session in get_session():
         drivers = await load_drivers(session)
+        if not agent:
+            agent = request.cookies.get("agent")
+        if agent:
+            ag = await load_agent(session, agent)
+            if ag:
+                result = await session.execute(
+                    select(Driver.id).join(agent_driver_table).where(agent_driver_table.c.agent_id == ag.id)
+                )
+                assigned = [r[0] for r in result.all()]
+                return [d for d in drivers.keys() if d in assigned]
         return list(drivers.keys())
 
 
@@ -1563,3 +1597,44 @@ async def employee_logs():
                 }
             )
         return logs
+
+
+# ---------------------------- AGENTS ---------------------------------
+
+@app.get("/admin/agents", response_model=list[AgentOut], tags=["admin"])
+async def admin_list_agents():
+    async for session in get_session():
+        result = await session.execute(select(Agent))
+        agents = []
+        for a in result.scalars():
+            agents.append(AgentOut(username=a.username, drivers=[d.id for d in a.drivers]))
+        return agents
+
+
+@app.post("/admin/agents", tags=["admin"], status_code=201)
+async def admin_create_agent(agent: AgentIn):
+    async for session in get_session():
+        existing = await load_agent(session, agent.username)
+        if existing:
+            raise HTTPException(status_code=400, detail="Agent exists")
+        a = Agent(username=agent.username, password=agent.password)
+        if agent.drivers:
+            drivers = await session.execute(select(Driver).where(Driver.id.in_(agent.drivers)))
+            a.drivers = list(drivers.scalars())
+        session.add(a)
+        await session.commit()
+        return {"success": True}
+
+
+@app.put("/admin/agents/{username}", tags=["admin"])
+async def admin_update_agent(username: str, data: AgentIn):
+    async for session in get_session():
+        agent = await load_agent(session, username)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Not found")
+        agent.password = data.password
+        if data.drivers is not None:
+            drivers = await session.execute(select(Driver).where(Driver.id.in_(data.drivers)))
+            agent.drivers = list(drivers.scalars())
+        await session.commit()
+        return {"success": True}
