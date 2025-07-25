@@ -214,7 +214,21 @@
       <input id="agentDrivers" placeholder="Drivers (comma separated)" class="border p-1 rounded" />
       <button onclick="addAgent()" class="px-3 py-1 bg-green-600 text-white rounded">Add</button>
     </div>
-    <div id="agentsList"></div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div>
+        <h3 class="font-semibold mb-2">Agents</h3>
+        <div id="agentsList" class="space-y-2"></div>
+      </div>
+      <div>
+        <h3 class="font-semibold mb-2">Drivers</h3>
+        <div id="driversAssign" class="space-y-1"></div>
+      </div>
+      <div>
+        <h3 class="font-semibold mb-2">Merchants</h3>
+        <div id="merchantsAssign" class="space-y-1"></div>
+      </div>
+    </div>
+    <button class="mt-3 px-3 py-1 bg-blue-600 text-white rounded" onclick="saveAssignments()">Save</button>
   </div>
 
   <!-- Merchants management tab -->
@@ -437,10 +451,40 @@ async function loadPayouts(){
 }
 
 // ----------------------- AGENTS -------------------------------
+let agentsData=[], driversData=[], merchantsData=[], currentAgent=null;
 async function loadAgentsTab(){
+  agentsData=await fetch('/admin/agents').then(r=>r.json()).catch(()=>[]);
+  driversData=await fetch('/drivers').then(r=>r.json()).catch(()=>[]);
+  merchantsData=await fetch('/admin/merchants').then(r=>r.json()).catch(()=>[]);
   const list=document.getElementById('agentsList');
-  const data=await fetch('/admin/agents').then(r=>r.json()).catch(()=>[]);
-  list.innerHTML=data.map(a=>`<div class='border p-2 my-1'>${a.username} – drivers: ${a.drivers.join(', ')}</div>`).join('');
+  list.innerHTML=agentsData.map(a=>`<div class='p-2 border rounded cursor-pointer hover:bg-gray-100' onclick="selectAgent('${a.username}')">${a.username}</div>`).join('');
+  document.getElementById('driversAssign').innerHTML='';
+  document.getElementById('merchantsAssign').innerHTML='';
+  currentAgent=null;
+}
+
+function selectAgent(name){
+  currentAgent=name;
+  document.querySelectorAll('#agentsList div').forEach(d=>{d.classList.toggle('bg-blue-100',d.textContent===name);});
+  const agent=agentsData.find(a=>a.username===name)||{drivers:[]};
+  const dList=document.getElementById('driversAssign');
+  dList.innerHTML=driversData.map(d=>`<label class='block'><input type='checkbox' value='${d}' ${agent.drivers.includes(d)?'checked':''}> ${d}</label>`).join('');
+  const mList=document.getElementById('merchantsAssign');
+  mList.innerHTML=merchantsData.map(m=>`<label class='block'><input type='checkbox' data-id='${m.id}' ${m.agents.includes(name)?'checked':''}> ${m.name}</label>`).join('');
+}
+
+async function saveAssignments(){
+  if(!currentAgent)return;
+  const drivers=Array.from(document.querySelectorAll('#driversAssign input:checked')).map(cb=>cb.value);
+  await fetch(`/admin/agents/${encodeURIComponent(currentAgent)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({drivers})});
+  const mChecks=document.querySelectorAll('#merchantsAssign input');
+  for(const cb of mChecks){
+    const id=cb.dataset.id;const m=merchantsData.find(x=>x.id==id);if(!m)continue;
+    if(cb.checked&&!m.agents.includes(currentAgent))m.agents.push(currentAgent);
+    if(!cb.checked&&m.agents.includes(currentAgent))m.agents=m.agents.filter(a=>a!==currentAgent);
+    await fetch(`/admin/merchants/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name,drivers:m.drivers,agents:m.agents})});
+  }
+  loadAgentsTab();
 }
 async function addAgent(){
   const name=document.getElementById('agentName').value.trim();
