@@ -1,0 +1,108 @@
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    DateTime,
+    Text,
+    ForeignKey,
+)
+from sqlalchemy.orm import declarative_base, relationship
+from datetime import datetime
+
+Base = declarative_base()
+
+class Driver(Base):
+    __tablename__ = "drivers"
+    id = Column(String, primary_key=True)
+    order_tab = Column(String)
+    payouts_tab = Column(String)
+
+class Order(Base):
+    __tablename__ = "orders"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    driver_id = Column(String, ForeignKey("drivers.id"), index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    order_name = Column(String, index=True)
+    customer_name = Column(String)
+    customer_phone = Column(String)
+    address = Column(Text)
+    tags = Column(String)
+    fulfillment = Column(String)
+    order_status = Column(String)
+    store = Column(String)
+    delivery_status = Column(String, index=True)
+    notes = Column(Text)
+    driver_notes = Column(Text)
+    scheduled_time = Column(String)
+    scan_date = Column(String, index=True)
+    cash_amount = Column(Float)
+    driver_fee = Column(Float)
+    payout_id = Column(String)
+    status_log = Column(Text)
+    comm_log = Column(Text)
+    follow_log = Column(Text)
+
+    driver = relationship("Driver")
+
+class Payout(Base):
+    __tablename__ = "payouts"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    driver_id = Column(String, ForeignKey("drivers.id"), index=True)
+    payout_id = Column(String, index=True)
+    date_created = Column(DateTime, default=datetime.utcnow, index=True)
+    orders = Column(Text)
+    total_cash = Column(Float)
+    total_fees = Column(Float)
+    total_payout = Column(Float)
+    status = Column(String)
+    date_paid = Column(DateTime)
+
+    driver = relationship("Driver")
+
+class DeliveryNote(Base):
+    __tablename__ = "delivery_notes"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    driver_id = Column(String, ForeignKey("drivers.id"), index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    status = Column(String, default="draft", index=True)
+    approved_at = Column(DateTime)
+
+    driver = relationship("Driver")
+    items = relationship("DeliveryNoteItem", back_populates="note")
+
+class DeliveryNoteItem(Base):
+    __tablename__ = "delivery_note_items"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    note_id = Column(Integer, ForeignKey("delivery_notes.id",), index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), index=True)
+    scanned_at = Column(DateTime, default=datetime.utcnow)
+
+    note = relationship("DeliveryNote", back_populates="items")
+    order = relationship("Order")
+
+class EmployeeLog(Base):
+    __tablename__ = "employee_logs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    employee = Column(String, index=True)
+    order = Column(String, index=True)
+    amount = Column(Float)
+
+class VerificationOrder(Base):
+    """Orders imported from the Google Sheet for admin verification."""
+
+    __tablename__ = "verification_orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_date = Column(String, index=True)
+    order_name = Column(String, index=True)
+    customer_name = Column(String)
+    customer_phone = Column(String)
+    address = Column(Text)
+    cod_total = Column(String)
+    city = Column(String)
+    driver_id = Column(String, ForeignKey("drivers.id"))
+    scan_time = Column(DateTime)
+
+    driver = relationship("Driver")
