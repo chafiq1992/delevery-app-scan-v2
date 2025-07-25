@@ -44,6 +44,9 @@ class Order(Base):
     status_log = Column(Text)
     comm_log = Column(Text)
     follow_log = Column(Text)
+    return_pending = Column(Integer, default=0)
+    return_agent = Column(String)
+    return_time = Column(DateTime)
 
     driver = relationship("Driver")
 

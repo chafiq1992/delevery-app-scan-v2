@@ -58,12 +58,49 @@ async def init_db() -> None:
             if not result.first():
                 await conn.execute(text("ALTER TABLE orders ADD COLUMN driver_notes TEXT"))
 
+            result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='orders' AND column_name='return_pending'"
+                )
+            )
+            if not result.first():
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN return_pending INTEGER DEFAULT 0"))
+
+            result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='orders' AND column_name='return_agent'"
+                )
+            )
+            if not result.first():
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN return_agent VARCHAR(255)"))
+
+            result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='orders' AND column_name='return_time'"
+                )
+            )
+            if not result.first():
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN return_time TIMESTAMP"))
+
     default_drivers = ["abderrehman", "anouar", "mohammed", "nizar"]
     async with AsyncSessionLocal() as session:
         for d_id in default_drivers:
             if not await session.get(Driver, d_id):
                 logger.info("Inserting default driver %s", d_id)
                 session.add(Driver(id=d_id))
+        await session.commit()
+
+        await session.execute(
+            text(
+                "UPDATE orders SET return_pending=1 "
+                "WHERE delivery_status IN ('Returned','Annulé','Refusé') "
+                "AND (return_pending IS NULL OR return_pending=0) "
+                "AND return_time IS NULL"
+            )
+        )
         await session.commit()
     logger.info("Database initialization complete")
 
