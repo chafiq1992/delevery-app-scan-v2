@@ -834,7 +834,7 @@ async def list_active_orders(driver: str = Query(...)):
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
                 or_(
                     DeliveryNote.status == "approved",
-                    DeliveryNote.id == None,
+                    DeliveryNote.id.is_(None),
                 ),
             )
         )
@@ -885,7 +885,7 @@ async def list_archived_orders(driver: str = Query(...)):
                 or_(Order.return_pending == None, Order.return_pending == 0),
                 or_(
                     DeliveryNote.status == "approved",
-                    DeliveryNote.id == None,
+                    DeliveryNote.id.is_(None),
                 ),
             )
             .order_by(Order.timestamp.desc())
@@ -915,7 +915,7 @@ async def list_all_orders(driver: str = Query(...)):
                 Order.delivery_status != "Deleted",
                 or_(
                     DeliveryNote.status == "approved",
-                    DeliveryNote.id == None,
+                    DeliveryNote.id.is_(None),
                 ),
             )
         )
@@ -944,7 +944,7 @@ async def list_followup_orders(driver: str = Query(...)):
                 Order.delivery_status.notin_(COMPLETED_STATUSES),
                 or_(
                     DeliveryNote.status == "approved",
-                    DeliveryNote.id == None,
+                    DeliveryNote.id.is_(None),
                 ),
             )
         )

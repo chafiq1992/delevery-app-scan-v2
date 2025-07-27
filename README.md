@@ -17,6 +17,7 @@ The backend is configured entirely through environment variables:
   `admin123`).
 - `REDIS_URL` – optional Redis instance used for caching.
 - `SHEET_ID` – ID of the Google Sheet providing fallback order data.
+- `VERIFICATION_SHEET_ID` – optional ID of the verification Google Sheet.
 - `GOOGLE_CREDENTIALS_B64` – **preferred**; base64 encoded service account JSON.
 - `GOOGLE_APPLICATION_CREDENTIALS` – optional path to the credentials file.
 
